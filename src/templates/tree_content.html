@@ -1,7 +1,8 @@
 {% if path %}
-<a href="{{ url_for('repo_content', owner=owner, repo_name=repo_name, path='') }}">Root</a>
+<span class="folder"><a href="{{ url_for('repo_content', owner=owner, repo_name=repo_name, path='') }}">Root</a></span>
 {% for current_path, part in current_paths %}
-/ <a href="{{ url_for('repo_content', owner=owner, repo_name=repo_name, path=current_path) }}">{{ part }}</a>
+/ <span class="folder"><a href="{{ url_for('repo_content', owner=owner, repo_name=repo_name, path=current_path) }}">{{
+        part }}</a></span>
 {% endfor %}
 {% endif %}
 
