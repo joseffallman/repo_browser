@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block styles %}{% endblock %}
+{% block title %}joCoding cloud service{% endblock %}
+{% block body %}
+<p class="lead text-center">Hantera dina projekt med enkelhet.</p>
+<div class="text-center">
+    <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg">
+        <i class="bi bi-github"></i> Logga in.
+    </a>
+</div>
+{% endblock %}
+{% block scripts %}{% endblock %}

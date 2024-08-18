@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% endblock %}
+
+{% block title %}Dina projekt: {% endblock %}
+{% block body %}
+<ul>
+    {% for name in repo_names %}
+    <li><a href="{{ url_for('repo_content', repo_name=name) }}">{{ name }}</a></li>
+    {% endfor %}
+</ul>
+
+<div class="text-center">
+    <a href="{{ url_for('logout') }}" class="btn btn-primary btn-lg">
+        <i class="bi bi-github"></i> Logga ut.
+    </a>
+</div>
+{% endblock %}
+{% block scripts %}{% endblock %}

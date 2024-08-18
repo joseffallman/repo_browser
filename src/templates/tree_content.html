@@ -1,0 +1,28 @@
+{% if path %}
+<a href="{{ url_for('repo_content', repo_name=repo_name, path='') }}">Root</a>
+{% for current_path, part in current_paths %}
+/ <a href="{{ url_for('repo_content', repo_name=repo_name, path=current_path) }}">{{ part }}</a>
+{% endfor %}
+{% endif %}
+
+<!-- Fil- och mappstruktur -->
+{% set delimiter = '' %}
+{% if path %}
+{% set delimiter = '/' %}
+{% endif %}
+<ul class="file-list">
+    {% for dir in dirs %}
+    <li class="folder">
+        <span class="file-type folder-icon"></span>
+        <a href="{{ url_for('repo_content', repo_name=repo_name, path=path + delimiter + dir['name']) }}">{{
+            dir['name'] }}</a>
+    </li>
+    {% endfor %}
+    {% for file in files %}
+    <li>
+        <span class="file-type file-icon"></span>
+        <a href="#" class="edit-file-link" data-filepath="{{ path + '/' + file['name'] }}">{{ file['name']
+            }}</a>
+    </li>
+    {% endfor %}
+</ul>
