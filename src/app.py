@@ -23,20 +23,26 @@ app.secret_key = os.getenv("secret_key")
 # Gitea-konfiguration
 client_id = os.getenv("client_id")
 client_secret = os.getenv("client_secret")
-gitea_instance = os.getenv("gitea_instance")
+gitea_url = os.getenv("gitea_url")
+app_url = os.getenv("app_url")
 
-if not gitea_instance.endswith("/"):
-    gitea_instance = gitea_instance + "/"
+if not app_url:
+    app_url = "http://localhost:5000/"
 
-authorization_base_url = f"{gitea_instance}login/oauth/authorize"
-token_url = f"{gitea_instance}login/oauth/access_token"
-api_base_url = f"{gitea_instance}api/v1"
+if not app_url.endswith("/"):
+    app_url = app_url + "/"
+
+if not gitea_url.endswith("/"):
+    gitea_url = gitea_url + "/"
+
+authorization_base_url = f"{gitea_url}login/oauth/authorize"
+token_url = f"{gitea_url}login/oauth/access_token"
+api_base_url = f"{gitea_url}api/v1"
 
 
 @app.route("/")
 def home():
     return render_template("home.html")
-    # return 'Välkommen till Gitea Repo Visare! <a href="/login">Logga in med Gitea</a>'
 
 
 @app.route("/login")
@@ -44,7 +50,7 @@ def login():
     try:
         gitea = OAuth2Session(
             client_id=client_id,
-            redirect_uri="http://localhost:5000/callback",
+            redirect_uri=f"{app_url}callback",
             scope="repository",
         )
         authorization_url, state = gitea.authorization_url(authorization_base_url)
