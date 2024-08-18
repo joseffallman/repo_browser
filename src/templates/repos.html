@@ -7,8 +7,8 @@
 {% block title %}Dina projekt: {% endblock %}
 {% block body %}
 <ul>
-    {% for name in repo_names %}
-    <li><a href="{{ url_for('repo_content', repo_name=name) }}">{{ name }}</a></li>
+    {% for repo in repo_infos %}
+    <li><a href="{{ url_for('repo_content', owner=repo['owner'], repo_name=repo['name']) }}">{{ repo['name'] }}</a></li>
     {% endfor %}
 </ul>
 

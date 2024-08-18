@@ -135,9 +135,9 @@
 <!-- Navigering -->
 <div class="tree">
     {% if path %}
-    <a href="{{ url_for('repo_content', repo_name=repo_name, path='') }}">Root</a>
+    <a href="{{ url_for('repo_content', owner=owner, repo_name=repo_name, path='') }}">Root</a>
     {% for current_path, part in current_paths %}
-    / <a href="{{ url_for('repo_content', repo_name=repo_name, path=current_path) }}">{{ part }}</a>
+    / <a href="{{ url_for('repo_content', owner=owner, repo_name=repo_name, path=current_path) }}">{{ part }}</a>
     {% endfor %}
     {% endif %}
 
@@ -150,7 +150,8 @@
         {% for dir in dirs %}
         <li class="folder">
             <span class="file-type folder-icon"></span>
-            <a href="{{ url_for('repo_content', repo_name=repo_name, path=path + delimiter + dir['name']) }}">{{
+            <a
+                href="{{ url_for('repo_content', owner=owner, repo_name=repo_name, path=path + delimiter + dir['name']) }}">{{
                 dir['name'] }}</a>
         </li>
         {% endfor %}

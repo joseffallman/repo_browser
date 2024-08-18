@@ -102,9 +102,16 @@ def repos():
         response = gitea.get(api_base_url + "/user/repos")
         response.raise_for_status()  # Kasta ett fel om statuskoden inte är 200-399
         repos = response.json()
-        repo_names = [repo["name"] for repo in repos]
+        repo_info = [
+            {
+                "name": repo["name"],
+                "owner": repo["owner"]["login"],
+                "full_name": repo["full_name"],
+            }
+            for repo in repos
+        ]
 
-        return render_template("repos.html", repo_names=repo_names)
+        return render_template("repos.html", repo_infos=repo_info)
 
     except HTTPError as http_err:
         flash(f"HTTP-fel vid hämtning av repositories: {http_err}")
@@ -114,14 +121,13 @@ def repos():
         return redirect(url_for("home"))
 
 
-@app.route("/repo/<repo_name>/contents/", defaults={"path": ""})
-@app.route("/repo/<repo_name>/contents/<path:path>")
-def repo_content(repo_name, path):
+@app.route("/repo/<owner>/<repo_name>/contents/", defaults={"path": ""})
+@app.route("/repo/<owner>/<repo_name>/contents/<path:path>")
+def repo_content(owner, repo_name, path):
     try:
         gitea = OAuth2Session(client_id, token=session["oauth_token"])
-        api_url = (
-            f"{api_base_url}/repos/{session['username']}/{repo_name}/contents/{path}"
-        )
+
+        api_url = f"{api_base_url}/repos/{owner}/{repo_name}/contents/{path}"
         # Dela upp path i delar och bygg upp current_paths
         path_parts = path.split("/")
         current_paths = []
@@ -139,10 +145,12 @@ def repo_content(repo_name, path):
             for item in contents
             if item["type"] == "dir" and not item["name"].startswith(".")
         ]
+        session["owner"] = owner  # Spara ägarnamnet i sessionen
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return render_template(
                 "tree_content.html",
+                owner=owner,
                 repo_name=repo_name,
                 path=path,
                 current_paths=current_paths,
@@ -152,6 +160,7 @@ def repo_content(repo_name, path):
         else:
             return render_template(
                 "repo_content.html",
+                owner=owner,
                 repo_name=repo_name,
                 path=path,
                 current_paths=current_paths,
@@ -173,7 +182,11 @@ def create_folder(repo_name):
 
     if not folder_name:
         flash("Mappnamn får inte vara tomt.")
-        return redirect(url_for("repo_content", repo_name=repo_name, path=path))
+        return redirect(
+            url_for(
+                "repo_content", owner=session["owner"], repo_name=repo_name, path=path
+            )
+        )
 
     full_path = f"{path}/{folder_name}".lstrip("/")
     try:
@@ -186,7 +199,7 @@ def create_folder(repo_name):
             "branch": "main",  # Här specificerar vi huvudgrenen, anpassa efter behov
         }
         response = gitea.put(
-            f"{api_base_url}/repos/{session['username']}/{repo_name}/contents/{full_path}/.gitkeep",
+            f"{api_base_url}/repos/{session['owner']}/{repo_name}/contents/{full_path}/.gitkeep",
             json=data,
         )
         response.raise_for_status()
@@ -197,7 +210,9 @@ def create_folder(repo_name):
     except Exception as e:
         flash(f"Något gick fel vid skapande av mapp: {e}")
 
-    return redirect(url_for("repo_content", repo_name=repo_name, path=path))
+    return redirect(
+        url_for("repo_content", owner=session["owner"], repo_name=repo_name, path=path)
+    )
 
 
 @app.route("/repo/<repo_name>/upload_file", methods=["POST"])
@@ -207,7 +222,11 @@ def upload_file(repo_name):
 
     if not uploaded_file:
         flash("Ingen fil vald.")
-        return redirect(url_for("repo_content", repo_name=repo_name, path=path))
+        return redirect(
+            url_for(
+                "repo_content", owner=session["owner"], repo_name=repo_name, path=path
+            )
+        )
 
     file_content = uploaded_file.read().decode("utf-8")  # Läser filens innehåll
     file_name = uploaded_file.filename
@@ -221,7 +240,7 @@ def upload_file(repo_name):
             "branch": "main",  # Här specificerar vi huvudgrenen, anpassa efter behov
         }
         response = gitea.put(
-            f"{api_base_url}/repos/{session['username']}/{repo_name}/contents/{full_path}",
+            f"{api_base_url}/repos/{session['owner']}/{repo_name}/contents/{full_path}",
             json=data,
         )
         response.raise_for_status()
@@ -232,7 +251,9 @@ def upload_file(repo_name):
     except Exception as e:
         flash(f"Något gick fel vid uppladdning av fil: {e}")
 
-    return redirect(url_for("repo_content", repo_name=repo_name, path=path))
+    return redirect(
+        url_for("repo_content", owner=session["owner"], repo_name=repo_name, path=path)
+    )
 
 
 @app.route("/repo/<repo_name>/get_file_content", methods=["GET"])
@@ -244,7 +265,7 @@ def get_file_content(repo_name):
     try:
         gitea = OAuth2Session(client_id, token=session["oauth_token"])
         response = gitea.get(
-            f"{api_base_url}/repos/{session['username']}/{repo_name}/contents/{path}"
+            f"{api_base_url}/repos/{session['owner']}/{repo_name}/contents/{path}"
         )
         response.raise_for_status()
 
@@ -264,14 +285,18 @@ def edit_file(repo_name):
 
     if not path:
         flash("Ingen fil angiven.")
-        return redirect(url_for("repo_content", repo_name=repo_name, path=path))
+        return redirect(
+            url_for(
+                "repo_content", owner=session["owner"], repo_name=repo_name, path=path
+            )
+        )
 
     try:
         gitea = OAuth2Session(client_id, token=session["oauth_token"])
 
         # Hämta den befintliga filinformationen
         response = gitea.get(
-            f"{api_base_url}/repos/{session['username']}/{repo_name}/contents/{path}"
+            f"{api_base_url}/repos/{session['owner']}/{repo_name}/contents/{path}"
         )
         response.raise_for_status()
         file_data = response.json()
@@ -286,7 +311,7 @@ def edit_file(repo_name):
 
         # Skicka PUT-förfrågan för att uppdatera filen
         update_response = gitea.put(
-            f"{api_base_url}/repos/{session['username']}/{repo_name}/contents/{path}",
+            f"{api_base_url}/repos/{session['owner']}/{repo_name}/contents/{path}",
             json=update_data,
         )
         update_response.raise_for_status()
@@ -300,7 +325,14 @@ def edit_file(repo_name):
     # Extrahera mappens sökväg
     directory_path = "/".join(path.split("/")[:-1])
 
-    return redirect(url_for("repo_content", repo_name=repo_name, path=directory_path))
+    return redirect(
+        url_for(
+            "repo_content",
+            owner=session["owner"],
+            repo_name=repo_name,
+            path=directory_path,
+        )
+    )
 
 
 if __name__ == "__main__":
