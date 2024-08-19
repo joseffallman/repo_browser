@@ -333,17 +333,18 @@
     });
 
 
-    // Stäng redigeringsmodalen
-    document.getElementById('closeEditModal').onclick = function () {
-        document.getElementById('editFileModal').style.display = 'none';
-    }
-
-    // Stäng modal om användaren klickar utanför den
-    window.onclick = function (event) {
-        if (event.target == document.getElementById('editFileModal')) {
+    document.addEventListener('click', function (event) {
+        // Kontrollera om klicket är på knappen för att stänga redigeringsmodulen
+        if (event.target && event.target.id === 'closeEditModal') {
             document.getElementById('editFileModal').style.display = 'none';
         }
-    }
+
+        // Kontrollera om användaren klickade utanför modalen för att stänga den
+        const editFileModal = document.getElementById('editFileModal');
+        if (event.target === editFileModal) {
+            editFileModal.style.display = 'none';
+        }
+    });
 </script>
 
 <script>
