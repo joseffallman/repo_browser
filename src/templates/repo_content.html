@@ -224,6 +224,52 @@
         </li>
         {% endfor %}
     </ul>
+
+    <!-- Modal för att redigera filer -->
+    <div id="editFileModal" class="modal">
+        <div class="modal-content">
+            <h2>Redigera fil</h2>
+            <form id="editFileForm" action="{{ url_for('edit_file', repo_name=repo_name) }}" method="post">
+                <input type="hidden" name="path" id="editFilePath">
+                <input type="hidden" name="owner" value="{{ owner }}">
+                <textarea name="content" id="editFileContent"></textarea>
+                <br>
+                <button type="submit">Spara ändringar</button>
+                <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal för att skapa ny mapp -->
+    <div id="createFolderModal" class="modal">
+        <div class="modal-content">
+            <h2>Skapa ny mapp</h2>
+            <form id="createFolderForm" action="{{ url_for('create_folder', repo_name=repo_name) }}" method="post">
+                <input type="hidden" name="path" value="{{ path }}">
+                <input type="hidden" name="owner" value="{{ owner }}">
+                <input type="text" name="folder_name" placeholder="Ny mappnamn" required>
+                <br>
+                <button type="submit">Skapa mapp</button>
+                <button type="button" class="close-btn" id="closeCreateModal">Avbryt</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal för att ladda upp fil -->
+    <div id="uploadFileModal" class="modal">
+        <div class="modal-content">
+            <h2>Ladda upp fil</h2>
+            <form id="uploadFileForm" action="{{ url_for('upload_file', repo_name=repo_name) }}" method="post"
+                enctype="multipart/form-data">
+                <input type="hidden" name="path" value="{{ path }}">
+                <input type="hidden" name="owner" value="{{ owner }}">
+                <input type="file" name="file" required>
+                <br>
+                <button type="submit">Ladda upp</button>
+                <button type="button" class="close-btn" id="closeUploadModal">Avbryt</button>
+            </form>
+        </div>
+    </div>
 </div>
 
 <a href="{{ url_for('repos') }}">Tillbaka till listan över projekt</a>
@@ -237,49 +283,6 @@
 {% endblock %}
 
 {% block scripts %}
-
-<!-- Modal för att redigera filer -->
-<div id="editFileModal" class="modal">
-    <div class="modal-content">
-        <h2>Redigera fil</h2>
-        <form id="editFileForm" action="{{ url_for('edit_file', repo_name=repo_name) }}" method="post">
-            <input type="hidden" name="path" id="editFilePath">
-            <textarea name="content" id="editFileContent"></textarea>
-            <br>
-            <button type="submit">Spara ändringar</button>
-            <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
-        </form>
-    </div>
-</div>
-
-<!-- Modal för att skapa ny mapp -->
-<div id="createFolderModal" class="modal">
-    <div class="modal-content">
-        <h2>Skapa ny mapp</h2>
-        <form id="createFolderForm" action="{{ url_for('create_folder', repo_name=repo_name) }}" method="post">
-            <input type="hidden" name="path" value="{{ path }}">
-            <input type="text" name="folder_name" placeholder="Ny mappnamn" required>
-            <br>
-            <button type="submit">Skapa mapp</button>
-            <button type="button" class="close-btn" id="closeCreateModal">Avbryt</button>
-        </form>
-    </div>
-</div>
-
-<!-- Modal för att ladda upp fil -->
-<div id="uploadFileModal" class="modal">
-    <div class="modal-content">
-        <h2>Ladda upp fil</h2>
-        <form id="uploadFileForm" action="{{ url_for('upload_file', repo_name=repo_name) }}" method="post"
-            enctype="multipart/form-data">
-            <input type="hidden" name="path" value="{{ path }}">
-            <input type="file" name="file" required>
-            <br>
-            <button type="submit">Ladda upp</button>
-            <button type="button" class="close-btn" id="closeUploadModal">Avbryt</button>
-        </form>
-    </div>
-</div>
 <script>
     // Öppna modalen för att skapa mapp
     document.getElementById('openCreateModal').onclick = function () {
@@ -314,19 +317,21 @@
 
 <script>
     // Öppna redigeringsmodalen
-    document.querySelectorAll('.edit-file-link').forEach(link => {
-        link.addEventListener('click', function (event) {
+    document.querySelector('.tree').addEventListener('click', function (event) {
+        if (event.target.classList.contains('edit-file-link')) {
             event.preventDefault();
-            const filePath = this.dataset.filepath;
-            fetch(`{{ url_for('get_file_content', repo_name=repo_name) }}?path=${filePath}`)
+            const filePath = event.target.dataset.filepath;
+            fetch(`{{ url_for('get_file_content', repo_name=repo_name, owner=owner) }}?path=${filePath}`)
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('editFilePath').value = filePath;
                     document.getElementById('editFileContent').value = data.content;
                     document.getElementById('editFileModal').style.display = 'block';
-                });
-        });
+                })
+                .catch(error => console.error('Error:', error));
+        }
     });
+
 
     // Stäng redigeringsmodalen
     document.getElementById('closeEditModal').onclick = function () {
