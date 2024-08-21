@@ -277,7 +277,8 @@ def get_file_content(repo_name, owner):
         response.raise_for_status()
 
         file_data = response.json()
-        file_content = base64.b64decode(file_data["content"]).decode("utf-8")
+        file_content = base64.b64decode(file_data["content"])
+        file_content = file_content.decode("utf-8", errors="ignore")
         return jsonify({"content": file_content})
     except HTTPError as http_err:
         return jsonify({"error": f"HTTP-fel: {http_err}"}), 500
@@ -334,11 +335,80 @@ def edit_file(repo_name):
     return redirect(
         url_for(
             "repo_content",
-            owner=session["owner"],
+            owner=owner,
             repo_name=repo_name,
             path=directory_path,
         )
     )
+
+
+@app.route("/repo/<owner>/<repo_name>/search", methods=["GET"])
+def search_repo(owner, repo_name):
+    search_term = request.args.get("q", "").lower()
+    sha = request.args.get("sha", "HEAD")
+
+    try:
+        gitea = OAuth2Session(client_id, token=session["oauth_token"])
+
+        filtered_items = search(gitea, owner, repo_name, sha, search_term)
+
+        for item in filtered_items:
+            if item["type"] == "blob":
+                if (i := item["path"].rfind("/")) != -1:
+                    path = item["path"][0:i]
+                else:
+                    path = ""
+            elif item["type"] == "tree":
+                path = item["path"]
+
+            item["href"] = url_for(
+                "repo_content",
+                owner=owner,
+                repo_name=repo_name,
+                path=path,
+            )
+
+        return jsonify(filtered_items)
+    except Exception as e:
+        return jsonify({"error": f"Fel: {e}"}), 500
+
+
+def search(
+    gitea: OAuth2Session,
+    owner: str,
+    repo: str,
+    sha: str,
+    search_term: str,
+    page: int = 0,
+) -> list:
+    # Hämta den befintliga filinformationen
+    response = gitea.get(
+        f"{api_base_url}/repos/{owner}/{repo}/git/trees/{sha}?recursive=1&page={page}"
+    )
+    response.raise_for_status()
+    tree_data = response.json()
+    result = []
+
+    # Loopa igenom hela fil-trädet
+    if not tree_data["tree"]:
+        return result
+
+    for item in tree_data["tree"]:
+        if item["path"].startswith("."):
+            continue
+
+        if "/" in item["path"]:
+            filedirname = item["path"].split("/")[-1]
+        else:
+            filedirname = item["path"]
+
+        if search_term in filedirname.lower():
+            result.append(item)
+
+    if tree_data["truncated"]:
+        result += search(gitea, owner, repo, sha, search_term, page + 1)
+
+    return result
 
 
 if __name__ == "__main__":

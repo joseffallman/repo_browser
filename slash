@@ -2,7 +2,8 @@
 <span class="folder"><a href="{{ url_for('repo_content', owner=owner, repo_name=repo_name, path='') }}">Root</a></span>
 {% for current_path, part in current_paths %}
 / <span class="folder"><a href="{{ url_for('repo_content', owner=owner, repo_name=repo_name, path=current_path) }}">{{
-        part }}</a></span>
+        part
+        }}</a></span>
 {% endfor %}
 {% endif %}
 
@@ -22,8 +23,7 @@
     {% for file in files %}
     <li>
         <span class="file-type file-icon"></span>
-        <a href="#" class="edit-file-link" data-filepath="{{ path + '/' + file['name'] }}">{{
-            file['name']
+        <a href="#" class="edit-file-link" data-filepath="{{ path + '/' + file['name'] }}">{{ file['name']
             }}</a>
     </li>
     {% endfor %}
@@ -32,8 +32,7 @@
 <!-- Modal för att redigera filer -->
 <div id="editFileModal" class="modal">
     <div class="modal-content">
-        <p class="h3">Redigera fil </p>
-        <p id="filepathlabel" class="small"></p>
+        <h2>Redigera fil <span id="filepathlabel"></span></h2>
         <form id="editFileForm" action="{{ url_for('edit_file', repo_name=repo_name) }}" method="post">
             <input type="hidden" name="path" id="editFilePath">
             <input type="hidden" name="owner" value="{{ owner }}">
