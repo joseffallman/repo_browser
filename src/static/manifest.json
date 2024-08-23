@@ -1,0 +1,26 @@
+{
+    "name": "SurveyExport Cloud service",
+    "short_name": "SurveyExport",
+    "description": "Hantera dina inmätningsprojekt med enkelhet.",
+    "start_url": "/",
+    "display_override": [
+        "fullscreen",
+        "minimal-ui"
+    ],
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#007BFF",
+    "orientation": "any",
+    "icons": [
+        {
+            "src": "/static/icons/icon-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/static/icons/icon-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
