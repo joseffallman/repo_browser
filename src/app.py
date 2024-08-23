@@ -1,5 +1,6 @@
 import base64
 import os
+import time
 
 from dotenv import load_dotenv
 from flask import (
@@ -66,6 +67,7 @@ def login():
 @app.route("/logout")
 def logout():
     session.pop("oauth_token", None)  # Ta bort OAuth-token från sessionen
+    session.pop("user", None)
     flash("Du har loggat ut.", "primary")
     return redirect(url_for("home"))
 
@@ -80,7 +82,13 @@ def callback():
 
         # Spara token i sessionen
         session["oauth_token"] = token
-        return redirect(url_for(".repos"))
+        # session["oauth_token"]["expires_at"] = time.time() + token.get(
+        #     "expires_in", 3600
+        # )  # Default to 1 hour if not specified
+        user_info = gitea.get(f"{api_base_url}/user")
+        user_info.raise_for_status()
+        session["user"] = user_info.json()
+        return redirect(url_for("repos"))
     except HTTPError as http_err:
         flash(f"HTTP-fel vid hämtning av token: {http_err}", "danger")
         return redirect(url_for("home"))
@@ -89,18 +97,42 @@ def callback():
         return redirect(url_for("home"))
 
 
+@app.route("/refresh")
+def refresh():
+    token = session.get("oauth_token")
+    if token:
+        oauth = OAuth2Session(client_id, token=token)
+        new_token = oauth.refresh_token(
+            token_url, client_id=client_id, client_secret=client_secret
+        )
+        session["oauth_token"] = new_token
+        return "Token refreshed!"
+    return flash("You need to login first!", "warning")
+
+
+def is_token_expired():
+    token = session.get("oauth_token")
+    if not token:
+        return True
+    expires_at = token.get("expires_at")
+    if not expires_at:
+        return True
+    return time.time() > expires_at
+
+
+def before_request():
+    if "user" in session and is_token_expired():
+        refresh()
+
+
 @app.route("/repos")
 def repos():
     try:
+        before_request()
         gitea = OAuth2Session(client_id, token=session["oauth_token"])
-        # Hämta användarens data (inklusive användarnamn)
-        user_response = gitea.get(f"{api_base_url}/user")
-        user_response.raise_for_status()
-        user_data = user_response.json()
-        session["username"] = user_data["login"]  # Spara användarnamnet i sessionen
 
         response = gitea.get(api_base_url + "/user/repos")
-        response.raise_for_status()  # Kasta ett fel om statuskoden inte är 200-399
+        response.raise_for_status()
         repos = response.json()
         repo_info = [
             {
@@ -125,6 +157,7 @@ def repos():
 @app.route("/repo/<owner>/<repo_name>/contents/<path:path>")
 def repo_content(owner, repo_name, path):
     try:
+        before_request()
         gitea = OAuth2Session(client_id, token=session["oauth_token"])
 
         api_url = f"{api_base_url}/repos/{owner}/{repo_name}/contents/{path}"
@@ -193,6 +226,7 @@ def create_folder(repo_name):
 
     full_path = f"{path}/{folder_name}".lstrip("/")
     try:
+        before_request()
         gitea = OAuth2Session(client_id, token=session["oauth_token"])
 
         # Skicka en tom fil för att skapa en ny mapp (en tom README.md fil t.ex.)
@@ -237,6 +271,7 @@ def upload_file(repo_name):
     full_path = f"{path}/{file_name}".lstrip("/")
 
     try:
+        before_request()
         gitea = OAuth2Session(client_id, token=session["oauth_token"])
         data = {
             "message": f"Add file {full_path}",
@@ -270,6 +305,7 @@ def get_file_content(repo_name, owner):
         return jsonify({"error": "Ingen fil angiven."}), 400
 
     try:
+        before_request()
         gitea = OAuth2Session(client_id, token=session["oauth_token"])
         response = gitea.get(
             f"{api_base_url}/repos/{owner}/{repo_name}/contents/{path}"
@@ -299,6 +335,7 @@ def edit_file(repo_name):
         )
 
     try:
+        before_request()
         gitea = OAuth2Session(client_id, token=session["oauth_token"])
 
         # Hämta den befintliga filinformationen
@@ -348,6 +385,7 @@ def search_repo(owner, repo_name):
     sha = request.args.get("sha", "HEAD")
 
     try:
+        before_request()
         gitea = OAuth2Session(client_id, token=session["oauth_token"])
 
         filtered_items = search(gitea, owner, repo_name, sha, search_term)
