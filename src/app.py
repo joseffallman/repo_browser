@@ -1,4 +1,5 @@
 import base64
+import json
 import os
 import time
 
@@ -15,6 +16,8 @@ from flask import (
 )
 from requests.exceptions import HTTPError
 from requests_oauthlib import OAuth2Session
+
+from crd_reader import crd_to_json, json_to_crd
 
 load_dotenv()
 
@@ -259,6 +262,7 @@ def upload_file(repo_name):
     uploaded_file = request.files.get("file")
     path = request.form.get("path", "")
     owner = request.form.get("owner", "")
+    branch = request.form.get("branch", "main")  # Standardgren är 'main'
 
     if not uploaded_file:
         flash("Ingen fil vald.", "warning")
@@ -266,18 +270,36 @@ def upload_file(repo_name):
             url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
         )
 
-    file_content = uploaded_file.read().decode("utf-8")  # Läser filens innehåll
+    file_content = uploaded_file.read()  # Läser filens innehåll
     file_name = uploaded_file.filename
     full_path = f"{path}/{file_name}".lstrip("/")
 
     try:
         before_request()
         gitea = OAuth2Session(client_id, token=session["oauth_token"])
+
+        # Kontrollera om filen redan finns
+        get_response = gitea.get(
+            f"{api_base_url}/repos/{owner}/{repo_name}/contents/{full_path}",
+            params={"ref": branch},
+        )
+
+        if get_response.status_code == 200:
+            flash(
+                "En fil med detta namn finns redan på den angivna platsen.", "warning"
+            )
+            return redirect(
+                url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+            )
+
+        encoded_content = base64.b64encode(file_content).decode("utf-8")
+
         data = {
             "message": f"Add file {full_path}",
-            "content": base64.b64encode(file_content.encode("utf-8")).decode("utf-8"),
-            "branch": "main",  # Här specificerar vi huvudgrenen, anpassa efter behov
+            "content": encoded_content,
+            "branch": branch,
         }
+
         response = gitea.post(
             f"{api_base_url}/repos/{owner}/{repo_name}/contents/{full_path}",
             json=data,
@@ -286,10 +308,11 @@ def upload_file(repo_name):
 
         if response.status_code == 201:
             flash("Filen skapades framgångsrikt.", "success")
-    except HTTPError:  # as http_err:
-        resp = response.json()
-        flash(resp["message"], "danger")
-        # flash(f"HTTP-fel vid uppladdning av fil: {http_err}", "danger")
+        else:
+            flash("Något gick fel vid uppladdning av filen.", "danger")
+    except HTTPError as http_err:
+        error_detail = response.json().get("message", str(http_err))
+        flash(f"HTTP-fel vid uppladdning av fil: {error_detail}", "danger")
     except Exception as e:
         flash(f"Något gick fel vid uppladdning av fil: {e}", "danger")
 
@@ -314,8 +337,16 @@ def get_file_content(repo_name, owner):
 
         file_data = response.json()
         file_content = base64.b64decode(file_data["content"])
-        file_content = file_content.decode("utf-8", errors="ignore")
-        return jsonify({"content": file_content})
+
+        # Kontrollera om filen är en CRD-fil
+        if path.endswith(".crd"):
+            # Konvertera CRD-filens innehåll till JSON
+            file_content_json = crd_to_json(file_content)
+            return jsonify({"content": file_content_json})
+        else:
+            # För icke-CRD-filer, returnera innehållet som text
+            file_content = file_content.decode("utf-8", errors="ignore")
+            return jsonify({"content": file_content})
     except HTTPError as http_err:
         return jsonify({"error": f"HTTP-fel: {http_err}"}), 500
     except Exception as e:
@@ -345,10 +376,19 @@ def edit_file(repo_name):
         response.raise_for_status()
         file_data = response.json()
 
+        # Kontrollera om filen är en .crd-fil och konvertera om nödvändigt
+        if path.endswith(".crd"):
+            # Konvertera JSON-innehåll tillbaka till CRD-format
+            file_content = json_to_crd(content)
+            encoded_content = base64.b64encode(file_content).decode("utf-8")
+        else:
+            # För vanliga textfiler, behandla innehållet som vanlig text
+            encoded_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+
         # Förbered uppdateringen
         update_data = {
             "message": f"Edit file {path}",
-            "content": base64.b64encode(content.encode("utf-8")).decode("utf-8"),
+            "content": encoded_content,
             "sha": file_data["sha"],  # Filens nuvarande SHA krävs för att uppdatera
             "branch": "main",  # Här specificerar vi vilken branch som ska uppdateras
         }
