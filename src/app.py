@@ -34,8 +34,8 @@ gitea_url = os.getenv("gitea_url")
 app_url = os.getenv("app_url")
 
 # Build enviroments
-build_date = os.getenv("build_date")
-build_version = os.getenv("build_version")
+build_date = os.getenv("BUILD_DATE")
+build_version = os.getenv("BUILD_VERSION")
 
 if not app_url:
     app_url = "http://localhost:5000/"

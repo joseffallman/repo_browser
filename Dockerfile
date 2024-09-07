@@ -16,6 +16,9 @@ ARG BUILD_DATE=0
 ENV BUILD_VERSION=$BUILD_VERSION
 ENV BUILD_DATE=$BUILD_DATE
 
+RUN ECHO "BUILD_VERSION=$BUILD_VERSION"
+RUN ECHO "BUILD_DATE=$BUILD_DATE"
+
 # Installera Python-paket
 RUN pip install --no-cache-dir -r requirements.txt
 
