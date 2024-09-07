@@ -3,6 +3,7 @@
     "short_name": "SurveyExport",
     "description": "Hantera dina inmätningsprojekt med enkelhet.",
     "start_url": "/",
+    "scope": "/",
     "display_override": [
         "fullscreen",
         "minimal-ui"

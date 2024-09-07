@@ -58,6 +58,21 @@ def home():
     )
 
 
+@app.route("/manifest")
+def load_and_modify_manifest():
+    # Load the manifest.json from the static directory
+    manifest_path = os.path.join(app.static_folder, "manifest.json")
+
+    with open(manifest_path, "r") as file:
+        manifest_data = json.load(file)
+
+    # Modify the value (e.g., change version)
+    manifest_data["scope"] = "https://jocoding.it/"
+
+    # Return the modified manifest as JSON
+    return jsonify(manifest_data)
+
+
 @app.route("/login")
 def login():
     try:
