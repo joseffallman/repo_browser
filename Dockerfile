@@ -1,3 +1,6 @@
+ARG BUILD_VERSION=0
+ARG BUILD_DATE=0
+
 # Starta från en Python-baserad image
 FROM python:3.12-slim
 
@@ -9,6 +12,10 @@ WORKDIR /app
 
 # Kopiera kraven för Python-paket
 COPY requirements.txt requirements.txt
+
+# Ange versionen som har byggts
+ENV BUILD_VERSION=$BUILD_VERSION
+ENV BUILD_DATE=$BUILD_DATE
 
 # Installera Python-paket
 RUN pip install --no-cache-dir -r requirements.txt

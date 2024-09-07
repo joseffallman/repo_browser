@@ -30,6 +30,10 @@ client_secret = os.getenv("client_secret")
 gitea_url = os.getenv("gitea_url")
 app_url = os.getenv("app_url")
 
+# Build enviroments
+build_date = os.getenv("build_date")
+build_version = os.getenv("build_version")
+
 if not app_url:
     app_url = "http://localhost:5000/"
 
@@ -46,7 +50,9 @@ api_base_url = f"{gitea_url}api/v1"
 
 @app.route("/")
 def home():
-    return render_template("home.html")
+    return render_template(
+        "home.html", build_date=build_date, build_version=build_version
+    )
 
 
 @app.route("/login")
