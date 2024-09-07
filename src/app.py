@@ -34,8 +34,8 @@ gitea_url = os.getenv("gitea_url")
 app_url = os.getenv("app_url")
 
 # Build enviroments
-build_date = os.getenv("BUILD_DATE")
-build_version = os.getenv("BUILD_VERSION")
+build_date = os.getenv("BUILD_DATE", time.strftime("%Y-%m-%d"))
+build_version = os.getenv("BUILD_VERSION", "Develop")
 
 if len(build_version) > 15 and ":" in build_version:
     branch, repo = build_version.split(":")
@@ -55,11 +55,17 @@ token_url = f"{gitea_url}login/oauth/access_token"
 api_base_url = f"{gitea_url}api/v1"
 
 
+@app.context_processor
+def inject_global_variables():
+    return {
+        "build_date": build_date,
+        "build_version": build_version,
+    }
+
+
 @app.route("/")
 def home():
-    return render_template(
-        "home.html", build_date=build_date, build_version=build_version
-    )
+    return render_template("home.html")
 
 
 @app.route("/login")
@@ -267,7 +273,7 @@ def create_folder(repo_name):
         flash(f"Något gick fel vid skapande av mapp: {e}", "danger")
 
     return redirect(
-        url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+        url_for("repo_content", owner=owner, repo_name=repo_name, path=full_path)
     )
 
 

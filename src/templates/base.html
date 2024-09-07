@@ -35,6 +35,26 @@
         .btn-primary:hover {
             background-color: #0056b3;
         }
+
+        .alert {
+            position: relative;
+            overflow: hidden;
+            /* Så att indikatorn inte sträcker sig utanför meddelandet */
+            padding-right: 40px;
+            /* För att ge plats åt indikatorn */
+        }
+
+        .alert-indicator {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 4px;
+            /* Höjd på indikatorn */
+            background-color: rgba(0, 0, 0, 0.5);
+            /* Färg på indikatorn */
+            transition: width 0.5s linear;
+            /* Smidig övergång för bredden */
+        }
     </style>
     {% block styles %}{% endblock %}
 </head>
@@ -46,9 +66,11 @@
             {% if messages %}
             <div class="col-md-8">
                 {% for category, message in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                <div id="alert-{{ loop.index }}" class="alert alert-{{ category }} alert-dismissible fade show"
+                    role="alert">
                     {{ message }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    <div class="alert-indicator"></div>
                 </div>
                 {% endfor %}
             </div>
@@ -94,7 +116,48 @@
                 });
         }
     </script>
-    {% block scripts %}{% endblock %}
+    <script>
+        // Stäng meddelanden efter inställd tid
+        document.addEventListener('DOMContentLoaded', function () {
+            // Tiden i millisekunder efter vilken meddelandena stängs automatiskt
+            const autoCloseDuration = 15000;
+            const fadeDuration = 500;
+            const indicatorThickness = 4;
+
+            const alerts = document.querySelectorAll('.alert');
+
+            alerts.forEach(alert => {
+                const indicator = alert.querySelector('.alert-indicator');
+                const totalWidth = alert.offsetWidth;
+                let timeLeft = autoCloseDuration;
+
+                // Initialize the indicator width
+                indicator.style.width = `${totalWidth}px`;
+
+                // Update the indicator width based on remaining time
+                const interval = setInterval(() => {
+                    const widthPercent = timeLeft / autoCloseDuration;
+                    indicator.style.width = `${widthPercent * totalWidth}px`;
+                    timeLeft -= 500;
+
+                    if (timeLeft <= 0) {
+                        indicator.style.width = `0px`;
+                        clearInterval(interval);
+                    }
+                }, 500);
+                setTimeout(() => {
+                    alert.style.transition = `opacity ${fadeDuration}ms ease-out`;
+                    alert.style.opacity = '0';
+                    setTimeout(() => {
+                        const alertInstance = new bootstrap.Alert(alert);
+                        alertInstance.close();
+                    }, fadeDuration);
+                }, autoCloseDuration);
+            });
+        });
+    </script>
+    {% block scripts %}
+    {% endblock %}
 </body>
 
 </html>
