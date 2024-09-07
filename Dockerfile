@@ -1,6 +1,3 @@
-ARG BUILD_VERSION=0
-ARG BUILD_DATE=0
-
 # Starta från en Python-baserad image
 FROM python:3.12-slim
 
@@ -14,6 +11,8 @@ WORKDIR /app
 COPY requirements.txt requirements.txt
 
 # Ange versionen som har byggts
+ARG BUILD_VERSION=0
+ARG BUILD_DATE=0
 ENV BUILD_VERSION=$BUILD_VERSION
 ENV BUILD_DATE=$BUILD_DATE
 

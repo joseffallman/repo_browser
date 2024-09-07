@@ -59,7 +59,7 @@ def home():
 
 
 @app.route("/manifest")
-def load_and_modify_manifest():
+def manifest():
     # Load the manifest.json from the static directory
     manifest_path = os.path.join(app.static_folder, "manifest.json")
 
