@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block styles %}{% endblock %}
+{% block title %}SurveyExport Cloud service{% endblock %}
+{% block body %}
+<p class="lead text-center">Loggar in....</p>
+{% endblock %}
+{% block scripts %}
+<script>
+    // Kolla OAuth-resultatet och meddela huvudfönstret
+    function notifyParent() {
+        window.opener.postMessage('login_successful', window.location.origin);
+        window.close();  // Stänger popup-rutan
+    }
+
+    notifyParent();
+</script>
+{% endblock %}

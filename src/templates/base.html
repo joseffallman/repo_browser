@@ -62,15 +62,17 @@
                     <div class="card-body">
                         {% block body %}{% endblock %}
                     </div>
-                    <div class="card-footer d-flex justify-content-between">
-                        <div class="mr-auto">
-                            <small>Build: {{ build_date }}</small>
-                        </div>
+                    <div class="card-footer text-center">
                         <div>
                             <small>&copy; 2024 joCoding</small>
                         </div>
-                        <div class="ml-auto">
-                            <small>Version: {{ build_version }}</small>
+                        <div class="d-flex justify-content-between">
+                            <div class="mr-auto">
+                                <small>Build: {{ build_date }}</small>
+                            </div>
+                            <div class="ml-auto">
+                                <small>Version: {{ build_version }}</small>
+                            </div>
                         </div>
                     </div>
                 </div>

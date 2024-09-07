@@ -37,6 +37,10 @@ app_url = os.getenv("app_url")
 build_date = os.getenv("BUILD_DATE")
 build_version = os.getenv("BUILD_VERSION")
 
+if len(build_version) > 15 and ":" in build_version:
+    branch, repo = build_version.split(":")
+    build_version = branch + ":" + repo[0:7]
+
 if not app_url:
     app_url = "http://localhost:5000/"
 
@@ -100,7 +104,8 @@ def callback():
         user_info = gitea.get(f"{api_base_url}/user")
         user_info.raise_for_status()
         session["user"] = user_info.json()
-        return redirect(url_for("repos"))
+        return render_template("login_popup.html")
+        # return redirect(url_for("repos"))
     except HTTPError as http_err:
         flash(f"HTTP-fel vid hämtning av token: {http_err}", "danger")
         return redirect(url_for("home"))

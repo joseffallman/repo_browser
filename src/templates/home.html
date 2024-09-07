@@ -8,9 +8,31 @@
     tillåtelse att bläddra bland dina inmätningar.</p>
 <p class="lead text-center">Klicka på knappen nedan för att:</p>
 <div class="text-center">
-    <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg" target="_self">
+    <a href="#" onclick="openPopup()" class="btn btn-primary btn-lg">
         <i class="bi bi-github"></i> Logga in.
     </a>
 </div>
 {% endblock %}
-{% block scripts %}{% endblock %}
+{% block scripts %}
+<script>
+    function openPopup() {
+        // Öppna popup för OAuth-login
+        const width = 500, height = 600;
+        const left = (window.screen.width / 2) - (width / 2);
+        const top = (window.screen.height / 2) - (height / 2);
+        const loginUrl = "{{ url_for('login') }}";
+        const authWindow = window.open(loginUrl, 'OAuthLogin', `width=${width},height=${height},top=${top},left=${left}`);
+
+        // Lyssna efter meddelande från popup
+        window.addEventListener('message', function (event) {
+            if (event.origin !== window.location.origin) {
+                return;
+            }
+            if (event.data === 'login_successful') {
+                console.log('Login successful!');
+                window.location.href = "{{ url_for('repos') }}";
+            }
+        });
+    }
+</script>
+{% endblock %}
