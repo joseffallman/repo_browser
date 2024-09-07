@@ -17,7 +17,10 @@ from flask import (
 from requests.exceptions import HTTPError
 from requests_oauthlib import OAuth2Session
 
-from .crd_reader import crd_to_json, json_to_crd
+try:
+    from src.crd_reader import crd_to_json, json_to_crd
+except ImportError:
+    from crd_reader import crd_to_json, json_to_crd
 
 load_dotenv()
 
