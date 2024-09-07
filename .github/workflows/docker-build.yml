@@ -57,5 +57,5 @@ jobs:
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
-          BUILD_DATE=$BUILD_DATE
+          BUILD_DATE=${{env.BUILD_DATE}}
           BUILD_VERSION=${{GITHUB.REF_NAME}}:${{GITHUB.SHA}}
