@@ -67,7 +67,7 @@ def manifest():
         manifest_data = json.load(file)
 
     # Modify the value (e.g., change version)
-    manifest_data["scope"] = "https://jocoding.it/"
+    manifest_data["scope"] = "https://*.jocoding.it/"
 
     # Return the modified manifest as JSON
     return jsonify(manifest_data)
