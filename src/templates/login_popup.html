@@ -14,8 +14,17 @@
 <script>
     // Kolla OAuth-resultatet och meddela huvudfönstret
     function notifyParent() {
-        window.opener.postMessage('login_successful', window.location.origin);
-        window.close();  // Stänger popup-rutan
+        let isMobile = false;
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent)) {
+            isMobile = true;
+        }
+        if (isMobile) {
+            window.location.href = "{{ url_for('repos') }}";
+        } else {
+            window.opener.postMessage('login_successful', window.location.origin);
+            window.close();  // Stänger popup-rutan
+        }
+
     }
 
     notifyParent();

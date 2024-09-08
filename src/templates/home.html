@@ -16,12 +16,21 @@
 {% block scripts %}
 <script>
     function openPopup() {
+        let isMobile = false;
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent)) {
+            isMobile = true;
+        }
         // Öppna popup för OAuth-login
         const width = 500, height = 600;
         const left = (window.screen.width / 2) - (width / 2);
         const top = (window.screen.height / 2) - (height / 2);
         const loginUrl = "{{ url_for('login') }}";
-        const authWindow = window.open(loginUrl, 'OAuthLogin', `width=${width},height=${height},top=${top},left=${left}`);
+
+        if (isMobile) {
+            window.location.href = loginUrl;
+        } else {
+            authWindow = window.open(loginUrl, 'OAuthLogin', `width=${width},height=${height},top=${top},left=${left}`);
+        }
 
         // Lyssna efter meddelande från popup
         window.addEventListener('message', function (event) {
