@@ -100,6 +100,10 @@
         text-align: center;
     }
 
+    .search-modal-content {
+        min-height: 60vh;
+    }
+
     .modal-content textarea {
         width: 100%;
         height: 400px;
@@ -134,8 +138,8 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        position: absolute;
-        /* Absolut positionering för att centrera */
+        position: fixed;
+        /* Absolut positionering ändrad till fixed för att alltid vara centrerad på skärmen */
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
@@ -176,12 +180,28 @@
             transform: rotate(360deg);
         }
     }
+
+    /* Grå overlay*/
+    .overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        /* Halvtransparent svart/grå ton */
+        z-index: 5;
+        /* Ligger under loading-container men över resten */
+        display: none;
+        /* Dold som standard */
+    }
 </style>
 {% endblock %}
 
 {% block title %}Innehåll i projekt: {{ repo_name }}{% endblock %}
 {% block body %}
 <!-- Loading symbol -->
+<div class="overlay" id="overlay"></div> <!-- Grå overlay -->
 <div class="loading-container" id="loading-spinner" style="display: none;">
     <div class="loading-spinner-wrapper">
         <div class="loading-spinner"></div>
@@ -207,7 +227,7 @@
 
 <!-- Modal för sökning -->
 <div id="searchModal" class="modal">
-    <div class="modal-content">
+    <div class="modal-content search-modal-content">
         <h2>Sök efter filer eller mappar</h2>
         <form id="searchForm">
             <label for="searchTerm">Ange sökord:</label>
@@ -216,6 +236,8 @@
             <button type="button" class="close-btn" id="closeSearchModal">Avbryt</button>
         </form>
         <!-- Loading symbol -->
+
+        <div class="overlay" id="overlay-search" style="position: relative;"></div> <!-- Grå overlay -->
         <div class="loading-container" id="loading-spinner-search" style="display: none;">
             <div class="loading-spinner-wrapper">
                 <div class="loading-spinner"></div>
@@ -275,15 +297,21 @@
         document.getElementById('searchModal').style.display = 'none';
     }
 
-    // Stäng modal om användaren klickar utanför
+    // Stäng modal om användaren klickar utanför eller på avbryt knappen
     window.onclick = function (event) {
-        if (event.target == document.getElementById('createFolderModal')) {
+        if (event.target == document.getElementById('createFolderModal') ||
+            event.target == document.getElementById('closeCreateModal')
+        ) {
             document.getElementById('createFolderModal').style.display = 'none';
         }
-        if (event.target == document.getElementById('uploadFileModal')) {
+        if (event.target == document.getElementById('uploadFileModal') ||
+            event.target == document.getElementById('closeUploadModal')
+        ) {
             document.getElementById('uploadFileModal').style.display = 'none';
         }
-        if (event.target == document.getElementById('searchModal')) {
+        if (event.target == document.getElementById('searchModal') ||
+            event.target == document.getElementById('closeSearchModal')
+        ) {
             document.getElementById('searchModal').style.display = 'none';
         }
     }
@@ -299,6 +327,8 @@
         const loadingSpinner = document.getElementById('loading-spinner-search');
         // Visa laddar-symbolen
         loadingSpinner.style.display = 'flex';
+        const overlay = document.getElementById('overlay-search');
+        overlay.style.display = "block";
 
         fetch(`{{ url_for('search_repo', repo_name=repo_name, owner=owner) }}?q=${searchTerm}&sha=${sha}`)
             .then(response => response.json())
@@ -324,6 +354,7 @@
             .finally(() => {
                 // Dölj laddar-symbolen
                 loadingSpinner.style.display = 'none';
+                overlay.style.display = "none";
             });
     });
 
@@ -395,6 +426,8 @@
         // Visa laddar-symbolen
         const loadingSpinner = document.getElementById('loading-spinner');
         loadingSpinner.style.display = 'flex'; // Flex för att använda flexbox
+        const overlay = document.getElementById('overlay');
+        overlay.style.display = "block";
 
         fetch(url, {
             headers: {
@@ -411,6 +444,7 @@
             .finally(() => {
                 // Dölj laddar-symbolen
                 loadingSpinner.style.display = 'none';
+                overlay.style.display = 'none';
             });
     };
 </script>
