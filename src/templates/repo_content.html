@@ -2,6 +2,7 @@
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
     /* GitHub-liknande filstruktur */
     .file-list {
@@ -131,6 +132,46 @@
     .modal-content button.close-btn {
         background-color: red;
     }
+
+    /* Flikstyling */
+    .tab {
+        overflow: hidden;
+        border-bottom: 1px solid #ccc;
+    }
+
+    .tab button {
+        background-color: #007BFF;
+        float: left;
+        border: none;
+        outline: none;
+        cursor: pointer;
+        padding: 4px 16px 4px;
+        margin-top: 10px;
+        transition: 0.3s;
+        border-radius: 5px 5px 0px 0px;
+    }
+
+    .tab button:hover {
+        background-color: #0366d6;
+    }
+
+    .tab button.active {
+        background-color: #0366d6;
+        padding: 14px 16px 4px;
+        margin-top: 0px
+    }
+
+    .tabcontent {
+        display: none;
+        padding: 6px 12px;
+        border-top: none;
+    }
+
+    #map {
+        height: 400px;
+        width: 100%;
+        margin-bottom: 20px;
+    }
 </style>
 <style>
     .loading-container {
@@ -246,6 +287,50 @@
         </div>
         <ul id="treeList" class="file-list">
         </ul>
+    </div>
+</div>
+
+
+<!-- Modal för att redigera filer -->
+<div id="editFileModal" class="modal">
+    <div class="modal-content">
+
+        <!-- Flikar -->
+        <div class="tab">
+            <button class="tablinks" id="defaultOpen" onclick="openTab(event, 'FileView')">Visa</button>
+            <button class="tablinks" id="editTab" onclick="openTab(event, 'FileContent')">Redigera</button>
+            <button class="tablinks" id="mapTab" style="display:none;" onclick="openTab(event, 'Map')">Karta</button>
+        </div>
+
+        <!-- Flikinnehåll -->
+        <div id="FileView" class="tabcontent">
+            <p class="h3">Granska fil</p>
+            <p class="filepathlabel small"></p>
+            <textarea id="viewFileContent" class="file-content" disabled></textarea>
+            <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
+        </div>
+
+        <div id="FileContent" class="tabcontent">
+            <p class="h3">Redigera fil</p>
+            <p class="filepathlabel small"></p>
+            <form id="editFileForm" action="{{ url_for('edit_file', repo_name=repo_name) }}" method="post">
+                <input type="hidden" name="path" id="editFilePath">
+                <input type="hidden" name="owner" value="{{ owner }}">
+                <textarea name="content" id="editFileContent"></textarea>
+                <br>
+                <button type="submit">Spara ändringar</button>
+                <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
+            </form>
+        </div>
+
+        <div id="Map" class="tabcontent">
+            <h3>Karta</h3>
+            <div id="map"></div>
+            <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
+        </div>
+
+
+
     </div>
 </div>
 
@@ -373,19 +458,154 @@
     });
 </script>
 
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<!-- Proj4JS Library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.6.2/proj4.js"></script>
+<!-- Proj4Leaflet Library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4leaflet/1.0.2/proj4leaflet.js"></script>
+
+<script>
+    // Kontrollera om kartan redan är skapad
+    let map;
+
+    // Funktion för att öppna en flik
+    function openTab(evt, tabName) {
+        var i, tabcontent, tablinks;
+
+        // Dölj allt flikinnehåll
+        tabcontent = document.getElementsByClassName("tabcontent");
+        for (i = 0; i < tabcontent.length; i++) {
+            tabcontent[i].style.display = "none";
+        }
+
+        // Ta bort 'active' klassen från alla flikar
+        tablinks = document.getElementsByClassName("tablinks");
+        for (i = 0; i < tablinks.length; i++) {
+            tablinks[i].className = tablinks[i].className.replace(" active", "");
+        }
+
+        // Visa nu vald flik och lägg till 'active' klassen på den valda knappen
+        document.getElementById(tabName).style.display = "block";
+        evt.currentTarget.className += " active";
+    }
+
+    // Funktion för att skapa rätt crs
+    function crs(fileContent) {
+        var crs = new L.Proj.CRS('EPSG:3006',
+            '+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
+            {
+                resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5, 0.25, 0.125],
+                origin: [0, 0]
+            });
+        return crs;
+    }
+
+    // Definiera SWEREF 99 TM (EPSG:3006)
+    proj4.defs("EPSG:3006", "+proj=utm +zone=33 +ellps=GRS80 +units=m +no_defs");
+
+    // Definiera SWEREF 99 13 30 (EPSG:3007)
+    proj4.defs("EPSG:3007", "+proj=utm +zone=13 +ellps=GRS80 +units=m +no_defs");
+
+    // Definiera SWEREF 99 15 00 (EPSG:3008)
+    proj4.defs("EPSG:3008", "+proj=utm +zone=15 +ellps=GRS80 +units=m +no_defs");
+
+    // Funktion för att konvertera SWEREF 99 TM till WGS84
+    function convertToWGS84(nor, eas, sourceProjection) {
+        // Kontrollera om sourceProjection är definierad, annars använd standard (EPSG:3006)
+        const sourceProj = sourceProjection || "EPSG:3006";
+
+        const sourceCoords = [eas, nor]; // Ordning: [easting, northing]
+        const wgs84 = proj4(sourceProj, "EPSG:4326", sourceCoords); // Konvertera till WGS84
+        return wgs84; // Returnera [long, lat]
+    }
+
+    // Funktion för att visa en Leaflet-karta
+    function displayMap(fileContent) {
+        if (map) {
+            map.remove();
+        }
+
+        map = L.map('map').setView([59.8586, 17.6389], 18);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 25,
+            maxNativeZoom: 19
+        }).addTo(map);
+
+        // Skapa en array för att hålla alla koordinater
+        const bounds = [];
+
+        // Loopar igenom punkterna och lägger till dem på kartan
+        fileContent.points.forEach(point => {
+            const wgs84Coords = convertToWGS84(point.nor, point.eas);
+            const latLng = [wgs84Coords[1], wgs84Coords[0]]; // [lat, long]
+
+            const marker = L.marker(latLng).addTo(map); // [lat, long]
+            marker.bindPopup(`ID:<b>${point.id}</b><br>Kod:<b>${point.des}</b><br>N: ${point.nor}<br>E: ${point.eas}`, { autoPan: false });
+            // Öppna popupen när markören klickas
+            marker.on('click', function () {
+                marker.openPopup();
+            });
+
+            // Lägg till koordinaterna i bounds-arrayen
+            bounds.push(latLng);
+        });
+
+        map.fitBounds(bounds, { padding: [20, 20] });
+        console.log('Bounds:', bounds);
+        map.whenReady(function () {
+            map.fitBounds(bounds, { padding: [20, 20] });
+        });
+
+
+    }
+</script>
+
 <script>
     // Öppna redigeringsmodalen
     document.querySelector('.tree').addEventListener('click', function (event) {
         if (event.target.classList.contains('edit-file-link')) {
             event.preventDefault();
             const filePath = event.target.dataset.filepath;
+            document.getElementById("mapTab").style.display = "none";
+            document.getElementById('editFilePath').value = "";
+            document.getElementById('editFileContent').value = "";
+            document.getElementById('viewFileContent').value = "";
+            document.getElementById('editFileModal').style.display = 'block';
+
+
+            const filepathLabels = document.querySelectorAll('.filepathlabel');
+            filepathLabels.forEach(element => {
+                element.innerHTML = "";
+            });
+
+            // Öppna den första fliken som standard
+            document.getElementById("defaultOpen").click();
+
             fetch(`{{ url_for('get_file_content', repo_name=repo_name, owner=owner) }}?path=${filePath}`)
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById('filepathlabel').innerHTML = filePath
                     document.getElementById('editFilePath').value = filePath;
                     document.getElementById('editFileContent').value = data.content;
-                    document.getElementById('editFileModal').style.display = 'block';
+                    document.getElementById('viewFileContent').value = data.content;
+                    filepathLabels.forEach(element => {
+                        element.innerHTML = filePath;
+                    });
+
+
+                    // Kolla om filen är en .crd fil
+                    if (filePath.endsWith('.crd')) {
+                        document.getElementById("mapTab").style.display = "inline-block";
+                        //openTab(null, 'Map');  // Öppna kartfliken
+                        document.getElementById("mapTab").click();
+                        displayMap(JSON.parse(data.content));  // Visa kartan
+                    } else {
+                        document.getElementById("mapTab").style.display = "none";
+                        //openTab(null, 'FileContent');  // Öppna filfliken
+                    }
+                    // Öppna den första fliken som standard
+                    document.getElementById("defaultOpen").click();
                 })
                 .catch(error => console.error('Error:', error));
         }

@@ -29,21 +29,6 @@
     {% endfor %}
 </ul>
 
-<!-- Modal för att redigera filer -->
-<div id="editFileModal" class="modal">
-    <div class="modal-content">
-        <p class="h3">Redigera fil </p>
-        <p id="filepathlabel" class="small"></p>
-        <form id="editFileForm" action="{{ url_for('edit_file', repo_name=repo_name) }}" method="post">
-            <input type="hidden" name="path" id="editFilePath">
-            <input type="hidden" name="owner" value="{{ owner }}">
-            <textarea name="content" id="editFileContent"></textarea>
-            <br>
-            <button type="submit">Spara ändringar</button>
-            <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
-        </form>
-    </div>
-</div>
 
 <!-- Modal för att skapa ny mapp -->
 <div id="createFolderModal" class="modal">
