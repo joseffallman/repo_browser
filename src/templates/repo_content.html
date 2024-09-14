@@ -94,9 +94,9 @@
     .modal-content {
         background-color: #fefefe;
         margin: 5% auto;
-        padding: 20px;
+        padding: 5px;
         border: 1px solid #888;
-        width: 80%;
+        width: 100%;
         max-width: 800px;
         text-align: center;
     }
@@ -236,6 +236,90 @@
         display: none;
         /* Dold som standard */
     }
+
+    /* Stil för redigera point kods lista */
+    #pointsListBox {
+        margin: 1em 0px;
+    }
+
+    #pointsListBox .table-header {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px;
+        background-color: #f0f0f0;
+        font-weight: bold;
+        border-bottom: 2px solid #ccc;
+        font-family: Arial, sans-serif;
+    }
+
+    #pointsListBox #pointsList {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        font-family: Arial, sans-serif;
+        border: 1px solid #ccc;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Standardstil för punkterna */
+    #pointsListBox #pointsList li {
+        display: flex;
+        justify-content: space-between;
+        margin: 0px;
+        padding: 10px;
+        border-bottom: 1px solid #ddd;
+        background-color: #f9f9f9;
+        cursor: pointer;
+        user-select: none;
+        /* Förhindrar att text markeras */
+    }
+
+    #pointsListBox #pointsList li:hover {
+        background-color: #f0f0f0;
+    }
+
+    #pointsListBox #pointsList li.selected {
+        background-color: #d1e7fd;
+        /* Markeringsfärg */
+    }
+
+    #pointsListBox .table-header span,
+    #pointsListBox #pointsList li span {
+        width: 50%;
+        /* Låter varje del av raden ta upp halva bredden */
+    }
+
+    #pointsListBox .editing {
+        background-color: #fff;
+        /* Ljus bakgrund för redigerbart läge */
+        margin: 0px;
+        padding: 5px;
+    }
+
+
+    /* Styling for the lock icon */
+    .lock-container {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-around;
+    }
+
+    .lock-icon {
+        font-size: 24px;
+        margin-right: 10px;
+        cursor: pointer;
+    }
+
+    .locked .lock-icon {
+        color: gray;
+        /* Color for locked state */
+    }
+
+    .unlocked .lock-icon {
+        color: green;
+        /* Color for unlocked state */
+    }
 </style>
 {% endblock %}
 
@@ -300,6 +384,8 @@
             <button class="tablinks" id="defaultOpen" onclick="openTab(event, 'FileView')">Visa</button>
             <button class="tablinks" id="editTab" onclick="openTab(event, 'FileContent')">Redigera</button>
             <button class="tablinks" id="mapTab" style="display:none;" onclick="openTab(event, 'Map')">Karta</button>
+            <button class="tablinks" id="editCode" style="display:none;"
+                onclick="openTab(event, 'editPointCode')">Redigera punktkod</button>
         </div>
 
         <!-- Flikinnehåll -->
@@ -315,12 +401,37 @@
             <p class="filepathlabel small"></p>
             <form id="editFileForm" action="{{ url_for('edit_file', repo_name=repo_name) }}" method="post">
                 <input type="hidden" name="path" id="editFilePath">
-                <input type="hidden" name="owner" value="{{ owner }}">
+                <input type="hidden" name="owner" id="owner" value="{{ owner }}">
                 <textarea name="content" id="editFileContent"></textarea>
                 <br>
                 <button type="submit">Spara ändringar</button>
                 <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
             </form>
+        </div>
+
+        <div id="editPointCode" class="tabcontent">
+            <p class="h3">Redigera punktkod</p>
+            <div class="lock-container">
+                <label for="newDes">Ny kod:</label>
+                <input type="text" id="newDes" placeholder="Ange ny kod">
+                <span id="lockIcon" class="lock-icon">
+                    <span class="iconify" data-icon="mdi-lock-open"></span>
+                </span>
+            </div>
+            <button id="updateAllBtn">Uppdatera alla</button>
+            <button id="updateSelectedBtn">Uppdatera markerade</button>
+            <button id="clearSelectionBtn">Rensa markering</button>
+            <button id="selectAllBtn">Markera alla</button>
+            <div id="pointsListBox">
+                <div class="table-header">
+                    <span>ID</span>
+                    <span>Punktkod</span>
+                </div>
+                <ul id="pointsList"></ul>
+                <br>
+                <button id="saveBtn">Spara ändringar</button>
+                <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
+            </div>
         </div>
 
         <div id="Map" class="tabcontent">
@@ -553,13 +664,264 @@
         });
 
         map.fitBounds(bounds, { padding: [20, 20] });
-        console.log('Bounds:', bounds);
-        map.whenReady(function () {
-            map.fitBounds(bounds, { padding: [20, 20] });
+    }
+</script>
+<script>
+    // Funktioner för att hantera listan över punktkoderna.
+    let currentPointData = null;
+    const pointsList = document.getElementById('pointsList');
+    let isSelecting = false; // För att hålla koll på om musen är nere
+    let selectedItems = new Set(); // Set för att hålla koll på markerade rader
+
+    function setCurrentPointData(fileContent) {
+        currentPointData = fileContent; // Spara data i den globala variabeln
+        document.getElementById('newDes').value = ''; // Sätt textfältet till tomma
+    }
+
+    function renderPointsList() {
+        pointsList.innerHTML = ''; // Töm listan först
+        currentPointData.points.forEach(point => {
+            const listItem = document.createElement('li');
+            listItem.setAttribute('data-id', point.id);
+            listItem.innerHTML = `<span>${point.id}</span><span class="description">${point.des}</span>`;
+            pointsList.appendChild(listItem);
+        });
+    }
+
+    // Uppdatera alla punkter
+    document.getElementById('updateAllBtn').addEventListener('click', () => {
+        const newDes = document.getElementById('newDes').value;
+        if (newDes.trim()) {
+            currentPointData.points.forEach(point => {
+                point.des = newDes; // Uppdatera alla punkter
+            });
+            renderPointsList();
+        } else {
+            alert('Ange en giltig beskrivning.');
+        }
+    });
+
+    // Uppdatera markerade punkter
+    document.getElementById('updateSelectedBtn').addEventListener('click', () => {
+        const newDes = document.getElementById('newDes').value;
+        if (newDes.trim()) {
+            selectedItems.forEach(id => {
+                const point = currentPointData.points.find(p => p.id === id);
+                if (point) {
+                    point.des = newDes; // Uppdatera de markerade punkterna
+                }
+            });
+            renderPointsList(); // Återskapa listan
+            clearSelection(); // Rensa markering efter uppdatering
+        } else {
+            alert('Ange en giltig beskrivning.');
+        }
+    });
+
+
+    // Rensa alla markerade rader
+    document.getElementById('clearSelectionBtn').addEventListener('click', () => {
+        clearSelection();
+    });
+
+    // Markera alla rader
+    document.getElementById('selectAllBtn').addEventListener('click', () => {
+        selectAll();
+    });
+
+    // Hantera "klick och dra"-markering
+    pointsList.addEventListener('mousedown', (event) => {
+        const listItem = event.target.closest('li'); // Fånga närmaste <li>
+        if (listItem) {
+            isSelecting = true;
+            lastListItem = listItem;
+            toggleSelection(listItem);
+            updateInputCodeText(listItem); // Uppdatera beskrivningsfältet efter att vi togglat markeringen.
+        }
+    });
+
+    lastListItem = null;
+    pointsList.addEventListener('mouseover', (event) => {
+        const listItem = event.target.closest('li');
+        if (isSelecting && listItem && lastListItem !== listItem) {
+            lastListItem = listItem;
+            toggleSelection(listItem); // Fortsätt markera om musen dras
+        }
+    });
+    document.addEventListener('mouseup', () => {
+        isSelecting = false; // Släpp urvalet när musknappen släpps
+    });
+
+    // För touch - mobila enheter
+    pointsList.addEventListener('touchstart', (event) => {
+        const touchTarget = document.elementFromPoint(
+            event.touches[0].clientX,
+            event.touches[0].clientY
+        ).closest('li'); // Hitta närmaste li under fingret
+        if (touchTarget) {
+            isSelecting = true;
+            lastListItem = listItem;
+            startId = touchTarget.dataset.id;
+            toggleSelection(touchTarget);
+        }
+    });
+
+    pointsList.addEventListener('touchmove', (event) => {
+        const touchTarget = document.elementFromPoint(
+            event.touches[0].clientX,
+            event.touches[0].clientY
+        ).closest('li');
+        if (isSelecting && touchTarget && lastListItem !== listItem) {
+            lastListItem = listItem;
+            toggleSelection(touchTarget);
+        }
+    });
+
+    pointsList.addEventListener('touchend', () => {
+        isSelecting = false;
+    });
+
+    // Växla markering på rad
+    function toggleSelection(item) {
+        const id = item.getAttribute('data-id');
+        if (selectedItems.has(id)) {
+            selectedItems.delete(id); // Ta bort markering
+            item.classList.remove('selected');
+        } else {
+            selectedItems.add(id); // Lägg till markering
+            item.classList.add('selected');
+        }
+    }
+
+    // Rensa alla markeringar
+    function clearSelection() {
+        selectedItems.clear(); // Rensa setet
+        document.querySelectorAll('#pointsList li').forEach(item => {
+            item.classList.remove('selected'); // Ta bort markeringsstilen
+        });
+    }
+
+    // Markera alla rader
+    function selectAll() {
+        selectedItems.clear(); // Rensa setet
+        document.querySelectorAll('#pointsList li').forEach(item => {
+            const id = item.getAttribute('data-id');
+            selectedItems.add(id);
+            if (!item.classList.contains('selected')) {
+                item.classList.add('selected');
+            } // Lägg till markeringsstilen
+        });
+    }
+
+    // Växla mellan låst och olåst läge
+    function isLocked() {
+        return document.getElementById('lockIcon').classList.contains('locked');
+    }
+
+    document.getElementById('lockIcon').addEventListener('click', () => {
+        const lockIcon = document.getElementById('lockIcon');
+        if (isLocked()) {
+            lockIcon.innerHTML = '<span class="iconify" data-icon="mdi-lock-open"></span>'; // Byt till olåst ikon
+            lockIcon.classList.remove('locked');
+        } else {
+            lockIcon.innerHTML = '<span class="iconify" data-icon="mdi-lock"></span>'; // Byt till låst ikon
+            lockIcon.classList.add('locked');
+        }
+    });
+
+    function updateInputCodeText(item) {
+        if (isLocked()) {
+            return;
+        }
+        const id = item.getAttribute('data-id');
+        if (selectedItems.has(id)) {
+            const point = currentPointData.points.find(p => p.id === id);
+            if (point) {
+                document.getElementById('newDes').value = point.des;
+            }
+        }
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', () => {
+        // Bygg upp den data som ska skickas till servern
+        const form = document.getElementById('editFileForm');
+        document.getElementById('editFileContent').value = JSON.stringify(currentPointData);
+
+        // Skicka formuläret
+        form.submit();
+
+        document.getElementById('viewFileContent').value = JSON.stringify(currentPointData);
+        document.getElementById("mapTab").click();
+        displayMap(currentPointData);
+        document.getElementById("editCode").click();
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const pointsList = document.getElementById('pointsList');
+
+        pointsList.addEventListener('dblclick', (event) => {
+            const target = event.target;
+            if (target.classList.contains('description')) {
+                makeEditable(target);
+            }
         });
 
+        // Långtryck för mobila enheter
+        pointsList.addEventListener('touchstart', (event) => {
+            const target = event.target;
 
-    }
+            if (target.classList.contains('description')) {
+                touchTimer = setTimeout(() => {
+                    makeEditable(target);
+                }, 500); // Långtryck efter 500ms
+            }
+        });
+
+        pointsList.addEventListener('touchend', () => {
+            clearTimeout(touchTimer); // Avbryt om det inte var en långtryck
+        });
+
+        // Gör ett element redigerbart
+        function makeEditable(element) {
+            const originalText = element.textContent;
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = originalText;
+            input.classList.add('editing');
+            element.innerHTML = ''; // Töm elementets innehåll
+            element.appendChild(input);
+            input.focus();
+
+            // Spara ändringar vid Enter eller när man klickar utanför
+            input.addEventListener('blur', () => saveChanges(element, input));
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    saveChanges(element, input);
+                }
+            });
+        }
+
+        // Spara ändringar och uppdatera den ursprungliga texten
+        function saveChanges(element, input) {
+            const newText = input.value.trim();
+            if (newText !== '') {
+                element.textContent = newText;
+                // Här kan du också uppdatera currentPointData om det behövs
+                updatePointDescription(element.parentElement.getAttribute('data-id'), newText);
+            } else {
+                element.textContent = input.value; // Återställ till originaltext om tom
+            }
+            element.classList.remove('editing');
+        }
+
+        // Uppdatera beskrivningen i currentData
+        function updatePointDescription(id, newDescription) {
+            const point = currentPointData.points.find(p => p.id === id);
+            if (point) {
+                point.des = newDescription;
+            }
+        }
+    });
 </script>
 
 <script>
@@ -569,6 +931,7 @@
             event.preventDefault();
             const filePath = event.target.dataset.filepath;
             document.getElementById("mapTab").style.display = "none";
+            document.getElementById("editCode").style.display = "none";
             document.getElementById('editFilePath').value = "";
             document.getElementById('editFileContent').value = "";
             document.getElementById('viewFileContent').value = "";
@@ -597,11 +960,15 @@
                     // Kolla om filen är en .crd fil
                     if (filePath.endsWith('.crd')) {
                         document.getElementById("mapTab").style.display = "inline-block";
+                        document.getElementById("editCode").style.display = "inline-block";
                         //openTab(null, 'Map');  // Öppna kartfliken
                         document.getElementById("mapTab").click();
                         displayMap(JSON.parse(data.content));  // Visa kartan
+                        setCurrentPointData(JSON.parse(data.content)); // Visa punktdatan
+                        renderPointsList(); // Visa punktkodslista
                     } else {
                         document.getElementById("mapTab").style.display = "none";
+                        document.getElementById("editCode").style.display = "none";
                         //openTab(null, 'FileContent');  // Öppna filfliken
                     }
                     // Öppna den första fliken som standard
