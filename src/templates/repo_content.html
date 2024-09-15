@@ -240,6 +240,10 @@
     /* Stil för redigera point kods lista */
     #pointsListBox {
         margin: 1em 0px;
+        touch-action: pan-y;
+        /* Tillåt vertikal scroll men förhindra pinch-zoom */
+        overflow-y: scroll;
+        max-height: 50vh;
     }
 
     #pointsListBox .table-header {
@@ -429,9 +433,9 @@
                 </div>
                 <ul id="pointsList"></ul>
                 <br>
-                <button id="saveBtn">Spara ändringar</button>
-                <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
             </div>
+            <button id="saveBtn">Spara ändringar</button>
+            <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
         </div>
 
         <div id="Map" class="tabcontent">
@@ -671,6 +675,11 @@
     let currentPointData = null;
     const pointsList = document.getElementById('pointsList');
     let isSelecting = false; // För att hålla koll på om musen är nere
+    let isScrolling = false;
+    let startX = 0;
+    let startY = 0;
+    let startId = null;
+    let multiTouch = false; // För att spåra om två fingrar används
     let selectedItems = new Set(); // Set för att hålla koll på markerade rader
 
     function setCurrentPointData(fileContent) {
@@ -754,31 +763,51 @@
 
     // För touch - mobila enheter
     pointsList.addEventListener('touchstart', (event) => {
-        const touchTarget = document.elementFromPoint(
-            event.touches[0].clientX,
-            event.touches[0].clientY
-        ).closest('li'); // Hitta närmaste li under fingret
-        if (touchTarget) {
-            isSelecting = true;
-            lastListItem = listItem;
-            startId = touchTarget.dataset.id;
-            toggleSelection(touchTarget);
+        if (event.touches.length === 2) {
+            multiTouch = true;
+            const touch = event.touches[0]; // Det första fingret används för att starta markeringen
+            startX = touch.clientX;
+            startY = touch.clientY;
+            isScrolling = false;
+
+            const touchTarget = document.elementFromPoint(
+                event.touches[0].clientX,
+                event.touches[0].clientY
+            ).closest('li'); // Hitta närmaste li under fingret
+            if (touchTarget) {
+                isSelecting = true;
+                lastListItem = listItem;
+                startId = touchTarget.dataset.id;
+                toggleSelection(touchTarget);
+            }
         }
     });
 
     pointsList.addEventListener('touchmove', (event) => {
-        const touchTarget = document.elementFromPoint(
-            event.touches[0].clientX,
-            event.touches[0].clientY
-        ).closest('li');
-        if (isSelecting && touchTarget && lastListItem !== listItem) {
-            lastListItem = listItem;
-            toggleSelection(touchTarget);
+        // Kontrollera om multitouch pågår
+        if (multiTouch && event.touches.length === 1) {
+            const touch = event.touches[0];
+            const deltaX = touch.clientX - startX;
+            const deltaY = touch.clientY - startY;
+
+            // Fortsätt bara om det är horisontell rörelse och multitouch
+            if (isSelecting && Math.abs(deltaX) > Math.abs(deltaY)) {
+                const touchTarget = document.elementFromPoint(
+                    touch.clientX,
+                    touch.clientY
+                ).closest('li');
+                if (isSelecting && touchTarget && lastListItem !== listItem) {
+                    lastListItem = listItem;
+                    toggleSelection(touchTarget);
+                }
+            }
         }
     });
 
     pointsList.addEventListener('touchend', () => {
         isSelecting = false;
+        isScrolling = false;
+        multiTouch = false;
     });
 
     // Växla markering på rad
@@ -858,6 +887,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         const pointsList = document.getElementById('pointsList');
+        let touchTimer = null;
 
         pointsList.addEventListener('dblclick', (event) => {
             const target = event.target;
