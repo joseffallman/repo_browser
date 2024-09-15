@@ -115,6 +115,7 @@
     }
 
     .modal-content input[type="text"],
+    .modal-content input[type="number"],
     .modal-content input[type="file"] {
         width: 80%;
         padding: 10px;
@@ -243,7 +244,7 @@
         touch-action: pan-y;
         /* Tillåt vertikal scroll men förhindra pinch-zoom */
         overflow-y: scroll;
-        max-height: 50vh;
+        height: 50vh;
     }
 
     #pointsListBox .table-header {
@@ -333,6 +334,31 @@
     .unlocked .lock-icon {
         color: green;
         /* Color for unlocked state */
+    }
+
+    /* Filter-modal stil */
+    .filter-modal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        width: 80%;
+        max-width: 400px;
+        transform: translate(-50%, -50%);
+        background-color: white;
+        padding: 20px;
+        box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+    }
+
+    .filter-content {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .filter-actions {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 10px;
     }
 </style>
 {% endblock %}
@@ -437,7 +463,31 @@
                 <button id="updateSelectedBtn">Uppdatera markerade</button>
                 <button id="clearSelectionBtn">Rensa markering</button>
                 <button id="selectAllBtn">Markera alla</button>
+                <button id="filterBtn">Filter</button>
             </div>
+
+            <!-- Filter-dialogruta som visas vid klick på Filter-knappen -->
+            <div id="filterModal" class="filter-modal" style="display: none;">
+                <div class="filter-content">
+                    <h4>Välj filter</h4>
+                    <div>
+                        <input type="checkbox" id="idFilterCheck" checked>
+                        <label for="idFilterCheck">Filter på ID</label>
+                        <input type="number" id="minId" placeholder="Min ID">
+                        <input type="number" id="maxId" placeholder="Max ID">
+                    </div>
+                    <div>
+                        <input type="checkbox" id="desFilterCheck" checked>
+                        <label for="desFilterCheck">Filter på Punktkod</label>
+                        <input type="text" id="filterByDes" placeholder="Filtrera på Punktkod">
+                    </div>
+                    <div class="filter-actions">
+                        <button id="applyFilterBtn">Tillämpa filter</button>
+                        <button id="closeFilterBtn">Stäng</button>
+                    </div>
+                </div>
+            </div>
+
             <div id="pointsListBox">
                 <div class="table-header">
                     <span>ID</span>
@@ -686,10 +736,21 @@
     // Funktioner för att hantera listan över punktkoderna.
     let currentPointData = null;
     const pointsList = document.getElementById('pointsList');
+    const filterModal = document.getElementById('filterModal');
     let isSelecting = false; // För att hålla koll på om musen är nere
     let startY = 0;
     let multiTouch = false; // För att spåra om två fingrar används
     let selectedItems = new Set(); // Set för att hålla koll på markerade rader
+
+    // Öppna filter-dialogen
+    document.getElementById('filterBtn').addEventListener('click', () => {
+        filterModal.style.display = 'block';
+    });
+
+    // Stäng filter-dialogen
+    document.getElementById('closeFilterBtn').addEventListener('click', () => {
+        filterModal.style.display = 'none';
+    });
 
     function setCurrentPointData(fileContent) {
         currentPointData = fileContent; // Spara data i den globala variabeln
@@ -698,13 +759,52 @@
 
     function renderPointsList() {
         pointsList.innerHTML = ''; // Töm listan först
+        const minIdInput = document.getElementById('minId');
+        const maxIdInput = document.getElementById('maxId');
+        const filterByDesInput = document.getElementById('filterByDes');
+        // Hämta min- och maxvärde från inputfälten (range)
+        const minId = parseInt(minIdInput.value, 10);
+        const maxId = parseInt(maxIdInput.value, 10);
+        const filterByDes = filterByDesInput.value.toLowerCase();
+
+        // Kontrollera om filter är aktiverade
+        const applyIdFilter = document.getElementById('idFilterCheck').checked;
+        const applyDesFilter = document.getElementById('desFilterCheck').checked;
+
         currentPointData.points.forEach(point => {
-            const listItem = document.createElement('li');
-            listItem.setAttribute('data-id', point.id);
-            listItem.innerHTML = `<span>${point.id}</span><span class="description">${point.des}</span>`;
-            pointsList.appendChild(listItem);
+            const pointId = parseInt(point.id, 10);
+
+            // Kontrollera om ID är inom angivet intervall om ID-filter är aktiverat
+            const isWithinIdRange = (!applyIdFilter || (
+                (!isNaN(minId) ? pointId >= minId : true) &&
+                (!isNaN(maxId) ? pointId <= maxId : true)
+            )
+            );
+
+            // Kontrollera om beskrivningen matchar om Punktkod-filter är aktiverat
+            const matchesDescription = (!applyDesFilter || filterByDes === '' || point.des.toLowerCase().includes(filterByDes));
+
+            // Om både ID-range och Punktkod matchar, visa punkten
+            if (isWithinIdRange && matchesDescription) {
+                const listItem = document.createElement('li');
+                listItem.setAttribute('data-id', point.id);
+                listItem.innerHTML = `<span>${point.id}</span><span class="description">${point.des}</span>`;
+                if (selectedItems.has(point.id)) {
+                    listItem.classList.add('selected');
+                }
+                pointsList.appendChild(listItem);
+            }
         });
     }
+    // Event listeners för filtreringsfälten
+    document.getElementById('minId').addEventListener('input', renderPointsList);
+    document.getElementById('maxId').addEventListener('input', renderPointsList);
+    document.getElementById('filterByDes').addEventListener('input', renderPointsList);
+    // Event listener för att tillämpa filter
+    document.getElementById('applyFilterBtn').addEventListener('click', () => {
+        renderPointsList(); // Tillämpa filtren på listan
+        filterModal.style.display = 'none'; // Stäng filterdialogen
+    });
 
     // Uppdatera alla punkter
     document.getElementById('updateAllBtn').addEventListener('click', () => {
