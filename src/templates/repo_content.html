@@ -122,7 +122,7 @@
     }
 
     .modal-content button {
-        padding: 10px 20px;
+        padding: 5px 10px;
         background-color: #007BFF;
         color: white;
         border: none;
@@ -142,7 +142,7 @@
     .tab button {
         background-color: #007BFF;
         float: left;
-        border: none;
+        border: 1px #ccc solid;
         outline: none;
         cursor: pointer;
         padding: 4px 16px 4px;
@@ -301,6 +301,16 @@
         padding: 5px;
     }
 
+    #pointlistBtn {
+        display: flex;
+        flex-wrap: wrap;
+        /* allow buttons to wrap to a new line if there's not enough space */
+        justify-content: center;
+        /* align buttons horizontally in the middle */
+        gap: 10px;
+        /* add some space between the buttons */
+    }
+
 
     /* Styling for the lock icon */
     .lock-container {
@@ -422,10 +432,12 @@
                     <span class="iconify" data-icon="mdi-lock-open"></span>
                 </span>
             </div>
-            <button id="updateAllBtn">Uppdatera alla</button>
-            <button id="updateSelectedBtn">Uppdatera markerade</button>
-            <button id="clearSelectionBtn">Rensa markering</button>
-            <button id="selectAllBtn">Markera alla</button>
+            <div id="pointlistBtn">
+                <button id="updateAllBtn">Uppdatera alla</button>
+                <button id="updateSelectedBtn">Uppdatera markerade</button>
+                <button id="clearSelectionBtn">Rensa markering</button>
+                <button id="selectAllBtn">Markera alla</button>
+            </div>
             <div id="pointsListBox">
                 <div class="table-header">
                     <span>ID</span>
@@ -675,10 +687,7 @@
     let currentPointData = null;
     const pointsList = document.getElementById('pointsList');
     let isSelecting = false; // För att hålla koll på om musen är nere
-    let isScrolling = false;
-    let startX = 0;
     let startY = 0;
-    let startId = null;
     let multiTouch = false; // För att spåra om två fingrar används
     let selectedItems = new Set(); // Set för att hålla koll på markerade rader
 
@@ -761,53 +770,58 @@
         isSelecting = false; // Släpp urvalet när musknappen släpps
     });
 
-    // För touch - mobila enheter
+    // När första fingret sätts ned
     pointsList.addEventListener('touchstart', (event) => {
-        if (event.touches.length === 2) {
+        if (event.touches.length === 1) {
+            // Om ett finger hålls ned, aktivera inte markering men sätt upp för att "hålla fast"
+            multiTouch = false;
+            startY = event.touches[0].clientY;
+            isSelecting = false; // Markering är inte aktiv än
+        } else if (event.touches.length === 2) {
+            // När två fingrar används, starta markeringsläget
             multiTouch = true;
-            const touch = event.touches[0]; // Det första fingret används för att starta markeringen
-            startX = touch.clientX;
+            isSelecting = true;  // Aktivera markeringsläget
+            const touch = event.touches[1];  // Andra fingret som ska markera
             startY = touch.clientY;
-            isScrolling = false;
-
-            const touchTarget = document.elementFromPoint(
-                event.touches[0].clientX,
-                event.touches[0].clientY
-            ).closest('li'); // Hitta närmaste li under fingret
-            if (touchTarget) {
-                isSelecting = true;
-                lastListItem = listItem;
-                startId = touchTarget.dataset.id;
-                toggleSelection(touchTarget);
+            const liElement = document.elementFromPoint(touch.clientX, touch.clientY).closest('li');
+            if (liElement) {
+                lastListItem = liElement;
+                toggleSelection(liElement);
             }
         }
     });
 
-    pointsList.addEventListener('touchmove', (event) => {
-        // Kontrollera om multitouch pågår
-        if (multiTouch && event.touches.length === 1) {
-            const touch = event.touches[0];
-            const deltaX = touch.clientX - startX;
-            const deltaY = touch.clientY - startY;
+    // Förhindra pinch-to-zoom
+    pointsList.addEventListener('touchmove', function (event) {
+        if (event.touches.length > 1) {
+            event.preventDefault(); // Förhindra zoomning
+        }
+    }, { passive: false });
 
-            // Fortsätt bara om det är horisontell rörelse och multitouch
-            if (isSelecting && Math.abs(deltaX) > Math.abs(deltaY)) {
-                const touchTarget = document.elementFromPoint(
-                    touch.clientX,
-                    touch.clientY
-                ).closest('li');
-                if (isSelecting && touchTarget && lastListItem !== listItem) {
-                    lastListItem = listItem;
-                    toggleSelection(touchTarget);
+    // När ett andra finger drar för att markera
+    pointsList.addEventListener('touchmove', (event) => {
+        if (isSelecting && event.touches.length === 2) {
+            const touch = event.touches[1];  // Använd andra fingret för att spåra markering
+            const currentY = touch.clientY;
+
+            // Kontrollera om användaren drar vertikalt
+            if (Math.abs(currentY - startY) > 10) { // Threshold för att känna igen en dragning
+                const liElement = document.elementFromPoint(touch.clientX, currentY).closest('li');
+                if (liElement && liElement !== lastListItem) {
+                    toggleSelection(liElement);
+                    lastListItem = liElement;
                 }
             }
         }
     });
 
-    pointsList.addEventListener('touchend', () => {
-        isSelecting = false;
-        isScrolling = false;
-        multiTouch = false;
+    pointsList.addEventListener('touchend', (event) => {
+        if (event.touches.length === 0) {
+            // Återställ efter släpp
+            isSelecting = false;
+            multiTouch = false;
+            lastListItem = null;
+        }
     });
 
     // Växla markering på rad
@@ -905,6 +919,10 @@
                     makeEditable(target);
                 }, 500); // Långtryck efter 500ms
             }
+        });
+
+        pointsList.addEventListener('touchmove', () => {
+            clearTimeout(touchTimer); // Avbryt om det inte var en långtryck
         });
 
         pointsList.addEventListener('touchend', () => {
