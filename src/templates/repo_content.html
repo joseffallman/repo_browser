@@ -8,6 +8,7 @@
     .file-list {
         list-style: none;
         padding-left: 0;
+        text-align: left;
     }
 
     .file-list li {
@@ -81,7 +82,7 @@
     .modal {
         display: none;
         position: fixed;
-        z-index: 1;
+        z-index: 1060;
         left: 0;
         top: 0;
         width: 100%;
@@ -117,10 +118,17 @@
     .modal-content input[type="text"],
     .modal-content input[type="number"],
     .modal-content input[type="file"] {
-        width: 80%;
+        width: 100%;
         padding: 10px;
         margin-bottom: 20px;
     }
+
+    #searchTerm {
+        width: 70%;
+        padding: 10px;
+        margin-bottom: 0px;
+    }
+
 
     .modal-content button {
         padding: 5px 10px;
@@ -186,7 +194,7 @@
         left: 50%;
         transform: translate(-50%, -50%);
         /* Centrera laddningsindikatorn */
-        z-index: 10;
+        z-index: 2010;
         /* Se till att laddningsindikatorn ligger över trädinnehållet */
     }
 
@@ -232,7 +240,7 @@
         height: 100%;
         background-color: rgba(0, 0, 0, 0.5);
         /* Halvtransparent svart/grå ton */
-        z-index: 5;
+        z-index: 2000;
         /* Ligger under loading-container men över resten */
         display: none;
         /* Dold som standard */
@@ -347,7 +355,7 @@
         background-color: white;
         padding: 20px;
         box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
-        z-index: 1000;
+        z-index: 1070;
     }
 
     .filter-content {
@@ -391,26 +399,87 @@
 </button>
 
 <!-- Modal för sökning -->
-<div id="searchModal" class="modal">
-    <div class="modal-content search-modal-content">
-        <h2>Sök efter filer eller mappar</h2>
-        <form id="searchForm">
-            <label for="searchTerm">Ange sökord:</label>
-            <input type="text" id="searchTerm" name="searchTerm">
-            <button type="submit">Sök</button>
-            <button type="button" class="close-btn" id="closeSearchModal">Avbryt</button>
-        </form>
-        <!-- Loading symbol -->
-
-        <div class="overlay" id="overlay-search" style="position: relative;"></div> <!-- Grå overlay -->
-        <div class="loading-container" id="loading-spinner-search" style="display: none;">
-            <div class="loading-spinner-wrapper">
-                <div class="loading-spinner"></div>
-                <div class="loading-text">Laddar...</div>
+<div id="searchModal" class="modal fade" tabindex="-1" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="searchModalLabel">Sök efter filer eller mappar</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="searchForm">
+                    <div class="mb-3">
+                        <label for="searchTerm" class="form-label">Ange sökord:</label>
+                        <div class="input-group">
+                            <input type="text" id="searchTerm" name="searchTerm" class="form-control" required>
+                            <button type="button" class="btn btn-outline-secondary" id="clearSearchTerm"
+                                title="Töm sökord">
+                                <i class="bi bi-x"></i> <!-- Om du använder Bootstrap Icons -->
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Sök</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+                </form>
+                <ul id="treeList" class="file-list">
+                    <!-- Lista med filer -->
+                </ul>
             </div>
         </div>
-        <ul id="treeList" class="file-list">
-        </ul>
+    </div>
+</div>
+
+<!-- Modal för att ladda upp fil -->
+<!-- Bootstrap Modal -->
+<div id="uploadFileModal" class="modal fade" tabindex="-1" aria-labelledby="uploadFileModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="uploadFileModalLabel">Ladda upp fil</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Filen kommer att laddas in i:<br> "<span id="folderPath">/</span>".</p>
+                <form id="uploadFileForm" action="{{ url_for('upload_file', repo_name=repo_name) }}" method="post"
+                    enctype="multipart/form-data">
+                    <input type="hidden" name="path" value="{{ path }}">
+                    <input type="hidden" name="owner" value="{{ owner }}">
+                    <div class="mb-3">
+                        <label for="fileInput" class="form-label">Välj fil</label>
+                        <input type="file" name="file" id="fileInput" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Ladda upp</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal för att skapa ny mapp -->
+<div id="createFolderModal" class="modal fade" tabindex="-1" aria-labelledby="createFolderModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createFolderModalLabel">Skapa ny mapp</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Den nya mappen kommer att skapas i:<br> "<span id="folderPath">/</span>".</p>
+                <form id="createFolderForm" action="{{ url_for('create_folder', repo_name=repo_name) }}" method="post">
+                    <input type="hidden" name="path" value="{{ path }}">
+                    <input type="hidden" name="owner" value="{{ owner }}">
+                    <div class="mb-3">
+                        <label for="folderName" class="form-label">Nytt mappnamn:</label>
+                        <input type="text" name="folder_name" id="folderName" class="form-control"
+                            placeholder="Ny mappnamn" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Skapa mapp</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -522,60 +591,57 @@
 
 <div class="text-center">
     <a href="{{ url_for('logout') }}" class="btn btn-primary btn-lg">
-        <i class="bi bi-github"></i> Logga ut.
+        <i class="bi bi-door-open-fill"></i> Logga ut.
     </a>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    function getPath() {
+        // Get the current page path
+        let myElement = document.getElementById('path');
+        if (myElement) {
+            let path = myElement.getAttribute('data-path');
+            return path;
+        } else {
+            return "/"
+        }
+    }
+</script>
+<script>
     // Öppna modalen för att skapa mapp
     document.getElementById('openCreateModal').onclick = function () {
-        document.getElementById('createFolderModal').style.display = 'block';
-    }
 
-    // Stäng modalen för att skapa mapp
-    document.getElementById('closeCreateModal').onclick = function () {
-        document.getElementById('createFolderModal').style.display = 'none';
+        var createFolderElement = document.getElementById('createFolderModal');
+        var createDirModal = new bootstrap.Modal(createFolderElement);
+        var form = document.getElementById('createFolderForm');
+        var hiddenInput = form.querySelector('input[name="path"]');
+        hiddenInput.value = getPath();
+        createFolderElement.querySelector('#folderPath').textContent = getPath();
+        console.log(hiddenInput.value);
+        createDirModal.show();
     }
 
     // Öppna modalen för att ladda upp fil
     document.getElementById('openUploadModal').onclick = function () {
-        document.getElementById('uploadFileModal').style.display = 'block';
-    }
 
-    // Stäng modalen för att ladda upp fil
-    document.getElementById('closeUploadModal').onclick = function () {
-        document.getElementById('uploadFileModal').style.display = 'none';
+        // document.getElementById('uploadFileModal').style.display = 'block';
+        var uploadFileElement = document.getElementById('uploadFileModal');
+        var uploadFileModal = new bootstrap.Modal(uploadFileElement);
+        var form = document.getElementById('uploadFileForm');
+        var hiddenInput = form.querySelector('input[name="path"]');
+        hiddenInput.value = getPath();
+        uploadFileElement.querySelector('#folderPath').textContent = getPath();
+        console.log(hiddenInput.value);
+        uploadFileModal.show();
     }
 
     // Öppna modalen för att söka
     document.getElementById('openSearchModal').onclick = function () {
-        document.getElementById('searchModal').style.display = 'block';
-    }
+        var searchModal = new bootstrap.Modal(document.getElementById('searchModal'));
+        searchModal.show();
 
-    // Stäng modalen för att söka
-    document.getElementById('closeSearchModal').onclick = function () {
-        document.getElementById('searchModal').style.display = 'none';
-    }
-
-    // Stäng modal om användaren klickar utanför eller på avbryt knappen
-    window.onclick = function (event) {
-        if (event.target == document.getElementById('createFolderModal') ||
-            event.target == document.getElementById('closeCreateModal')
-        ) {
-            document.getElementById('createFolderModal').style.display = 'none';
-        }
-        if (event.target == document.getElementById('uploadFileModal') ||
-            event.target == document.getElementById('closeUploadModal')
-        ) {
-            document.getElementById('uploadFileModal').style.display = 'none';
-        }
-        if (event.target == document.getElementById('searchModal') ||
-            event.target == document.getElementById('closeSearchModal')
-        ) {
-            document.getElementById('searchModal').style.display = 'none';
-        }
     }
 </script>
 <script>
@@ -586,10 +652,10 @@
         var sha = "{{ request.args.get('sha', 'HEAD') }}";
         var treeList = document.getElementById("treeList");
         treeList.innerHTML = ''; // Töm listan
-        const loadingSpinner = document.getElementById('loading-spinner-search');
+        const loadingSpinner = document.getElementById('loading-spinner');
         // Visa laddar-symbolen
         loadingSpinner.style.display = 'flex';
-        const overlay = document.getElementById('overlay-search');
+        const overlay = document.getElementById('overlay');
         overlay.style.display = "block";
 
         fetch(`{{ url_for('search_repo', repo_name=repo_name, owner=owner) }}?q=${searchTerm}&sha=${sha}`)
@@ -629,9 +695,17 @@
                 event.preventDefault();
                 let url = event.target.getAttribute('href');
                 load_tree_content(url)
-                document.getElementById('searchModal').style.display = 'none';
+                var searchModal = bootstrap.Modal.getInstance(document.getElementById('searchModal'));
+                searchModal.hide();
             }
         });
+    });
+
+    // Hämta kryssknappen och inputfältet
+    document.getElementById('clearSearchTerm').addEventListener('click', function () {
+        document.getElementById('searchTerm').value = ''; // Tömmer inputfältet
+        var treeList = document.getElementById("treeList");
+        treeList.innerHTML = ''; // Töm listan
     });
 </script>
 
