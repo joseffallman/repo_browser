@@ -3,9 +3,9 @@
 {% block title %}SurveyExport Cloud service{% endblock %}
 {% block body %}
 <p class="lead text-center">Inloggad.</p>
-<p class="lead text-center">Klicka på knappen nedan för att:</p>
+<p id="countdown-text" class="lead text-center">Klicka på knappen nedan för att:</p>
 <div class="text-center">
-    <a href="#" onclick="notifyParent()" class="btn btn-primary btn-lg">
+    <a href="#" id="action-button" onclick="notifyParent()" class="btn btn-primary btn-lg">
         <i class="bi bi-github"></i>fortsätta...
     </a>
 </div>
@@ -28,5 +28,28 @@
     }
 
     notifyParent();
+</script>
+<script>
+    let countdown = 5;
+
+    const countdownText = document.getElementById('countdown-text');
+    const actionButton = document.getElementById('action-button');
+    actionButton.setAttribute('disabled', true);
+    actionButton.classList.add('disabled');
+
+    const countdownInterval = setInterval(() => {
+        countdown--;
+        countdownText.innerHTML = `Om du inte skickas vidare inom ${countdown} sekunder, klicka på knappen nedan för att:`;
+
+        // När nedräkningen är klar, stoppa intervallet och genomför en åtgärd
+        if (countdown <= 0) {
+            clearInterval(countdownInterval);
+            actionButton.removeAttribute('disabled');
+            actionButton.classList.remove('disabled');
+
+
+            notifyParent();
+        }
+    }, 1000);
 </script>
 {% endblock %}
