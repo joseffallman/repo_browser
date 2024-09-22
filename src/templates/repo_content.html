@@ -831,8 +831,7 @@
         document.getElementById('newDes').value = ''; // Sätt textfältet till tomma
     }
 
-    function renderPointsList() {
-        pointsList.innerHTML = ''; // Töm listan först
+    function filterPoint(point) {
         const minIdInput = document.getElementById('minId');
         const maxIdInput = document.getElementById('maxId');
         const filterByDesInput = document.getElementById('filterByDes');
@@ -845,21 +844,33 @@
         const applyIdFilter = document.getElementById('idFilterCheck').checked;
         const applyDesFilter = document.getElementById('desFilterCheck').checked;
 
+        const pointId = parseInt(point.id, 10);
+
+        // Kontrollera om ID är inom angivet intervall om ID-filter är aktiverat
+        const isWithinIdRange = (!applyIdFilter || (
+            (!isNaN(minId) ? pointId >= minId : true) &&
+            (!isNaN(maxId) ? pointId <= maxId : true)
+        )
+        );
+
+        // Kontrollera om beskrivningen matchar om Punktkod-filter är aktiverat
+        const matchesDescription = (!applyDesFilter || filterByDes === '' || point.des.toLowerCase().includes(filterByDes));
+
+        // Om både ID-range och Punktkod matchar, visa punkten
+        if (isWithinIdRange && matchesDescription) {
+            return true;
+        }
+        return false;
+    }
+
+    function renderPointsList() {
+        pointsList.innerHTML = ''; // Töm listan först
+
         currentPointData.points.forEach(point => {
             const pointId = parseInt(point.id, 10);
 
-            // Kontrollera om ID är inom angivet intervall om ID-filter är aktiverat
-            const isWithinIdRange = (!applyIdFilter || (
-                (!isNaN(minId) ? pointId >= minId : true) &&
-                (!isNaN(maxId) ? pointId <= maxId : true)
-            )
-            );
-
-            // Kontrollera om beskrivningen matchar om Punktkod-filter är aktiverat
-            const matchesDescription = (!applyDesFilter || filterByDes === '' || point.des.toLowerCase().includes(filterByDes));
-
-            // Om både ID-range och Punktkod matchar, visa punkten
-            if (isWithinIdRange && matchesDescription) {
+            // Om punkten är synlig, visa den
+            if (filterPoint(point)) {
                 const listItem = document.createElement('li');
                 listItem.setAttribute('data-id', point.id);
                 listItem.innerHTML = `<span>${point.id}</span><span class="description">${point.des}</span>`;
@@ -885,7 +896,9 @@
         const newDes = document.getElementById('newDes').value;
         if (newDes.trim()) {
             currentPointData.points.forEach(point => {
-                point.des = newDes; // Uppdatera alla punkter
+                if (filterPoint(point)) {
+                    point.des = newDes; // Uppdatera alla punkter
+                }
             });
             renderPointsList();
         } else {
