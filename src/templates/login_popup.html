@@ -6,7 +6,7 @@
 <p id="countdown-text" class="lead text-center">Klicka på knappen nedan för att:</p>
 <div class="text-center">
     <a href="#" id="action-button" onclick="notifyParent()" class="btn btn-primary btn-lg">
-        <i class="bi bi-github"></i>fortsätta...
+        <i class="bi bi-github"></i> fortsätta...
     </a>
 </div>
 {% endblock %}
@@ -14,11 +14,14 @@
 <script>
     // Kolla OAuth-resultatet och meddela huvudfönstret
     function notifyParent() {
+        const countdownText = document.getElementById('countdown-text');
+
         let isMobile = false;
         if (/Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent)) {
             isMobile = true;
         }
         if (isMobile) {
+            countdownText.innerHTML = 'Laddar nästa sida...';
             window.location.href = "{{ url_for('repos') }}";
         } else {
             window.opener.postMessage('login_successful', window.location.origin);
@@ -26,8 +29,6 @@
         }
 
     }
-
-    notifyParent();
 </script>
 <script>
     let countdown = 5;
@@ -47,9 +48,13 @@
             actionButton.removeAttribute('disabled');
             actionButton.classList.remove('disabled');
 
-
             notifyParent();
         }
     }, 1000);
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        notifyParent();
+    });
 </script>
 {% endblock %}
