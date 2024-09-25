@@ -18,6 +18,15 @@
             margin-top: 50px;
         }
 
+        @media (max-width: 800px) {
+            .main-container {
+                margin-top: 0px;
+                padding-left: 2px;
+                padding-right: 2px;
+                position: relative;
+            }
+        }
+
         .card-header {
             background-color: #007bff;
             color: white;
@@ -156,6 +165,30 @@
                 }, autoCloseDuration);
             });
         });
+    </script>
+    <!-- Loading symbol -->
+    <div class="overlay" id="overlay"></div> <!-- Grå overlay -->
+    <div class="loading-container" id="loading-spinner" style="display: none;">
+        <div class="loading-spinner-wrapper">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Laddar...</div>
+        </div>
+    </div>
+    <script>
+        function loadingSpinner(show = false) {
+            const loadingSpinner = document.getElementById('loading-spinner');
+            const overlay = document.getElementById('overlay');
+
+            if (show) {
+                // Visa laddar-symbolen
+                loadingSpinner.style.display = 'flex';
+                overlay.style.display = "block";
+            } else {
+                // Dölj laddar-symbolen
+                loadingSpinner.style.display = 'none';
+                overlay.style.display = "none";
+            }
+        };
     </script>
     {% block scripts %}
     {% endblock %}

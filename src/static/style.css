@@ -38,3 +38,67 @@ button:hover {
     padding: 10px;
     margin-bottom: 15px;
 }
+
+/* Laddningsindikation */
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    /* Absolut positionering ändrad till fixed för att alltid vara centrerad på skärmen */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    /* Centrera laddningsindikatorn */
+    z-index: 2010;
+    /* Se till att laddningsindikatorn ligger över trädinnehållet */
+}
+
+.loading-spinner-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.loading-spinner {
+    width: 100px;
+    height: 100px;
+    border: 5px solid #f3f3f3;
+    border-top: 5px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.loading-text {
+    position: absolute;
+    /* Texten centreras ovanpå spinnern */
+    font-size: 16px;
+    color: #3498db;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Grå overlay*/
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    /* Halvtransparent svart/grå ton */
+    z-index: 2000;
+    /* Ligger under loading-container men över resten */
+    display: none;
+    /* Dold som standard */
+}

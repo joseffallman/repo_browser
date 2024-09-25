@@ -64,17 +64,17 @@
     }
 
     .plus-button {
-        bottom: 20px;
+        bottom: 30px;
         right: 20px;
     }
 
     .upload-button {
-        bottom: 80px;
+        bottom: 90px;
         right: 20px;
     }
 
     .search-button {
-        bottom: 140px;
+        bottom: 150px;
         right: 20px;
     }
 
@@ -132,7 +132,8 @@
 
     .modal-content button {
         padding: 5px 10px;
-        background-color: #007BFF;
+
+        /* background-color: #007BFF; */
         color: white;
         border: none;
         cursor: pointer;
@@ -183,69 +184,6 @@
     }
 </style>
 <style>
-    .loading-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        position: fixed;
-        /* Absolut positionering ändrad till fixed för att alltid vara centrerad på skärmen */
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        /* Centrera laddningsindikatorn */
-        z-index: 2010;
-        /* Se till att laddningsindikatorn ligger över trädinnehållet */
-    }
-
-    .loading-spinner-wrapper {
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .loading-spinner {
-        width: 100px;
-        height: 100px;
-        border: 5px solid #f3f3f3;
-        border-top: 5px solid #3498db;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-    }
-
-    .loading-text {
-        position: absolute;
-        /* Texten centreras ovanpå spinnern */
-        font-size: 16px;
-        color: #3498db;
-    }
-
-    @keyframes spin {
-        0% {
-            transform: rotate(0deg);
-        }
-
-        100% {
-            transform: rotate(360deg);
-        }
-    }
-
-    /* Grå overlay*/
-    .overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-        /* Halvtransparent svart/grå ton */
-        z-index: 2000;
-        /* Ligger under loading-container men över resten */
-        display: none;
-        /* Dold som standard */
-    }
-
     /* Stil för redigera point kods lista */
     #pointsListBox {
         margin: 1em 0px;
@@ -373,14 +311,7 @@
 
 {% block title %}Innehåll i projekt: {{ repo_name }}{% endblock %}
 {% block body %}
-<!-- Loading symbol -->
-<div class="overlay" id="overlay"></div> <!-- Grå overlay -->
-<div class="loading-container" id="loading-spinner" style="display: none;">
-    <div class="loading-spinner-wrapper">
-        <div class="loading-spinner"></div>
-        <div class="loading-text">Laddar...</div>
-    </div>
-</div>
+
 
 
 <!-- Plus-knapp -->
@@ -439,7 +370,8 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted">Filen kommer att laddas in i:<br> "<span id="folderPath">/</span>".</p>
+                <p class="text-muted">Filen kommer att laddas in i:</p>
+                <div id="folderPath" class="p-1 mt-2 mb-5 bg-warning rounded-3">/</div>
                 <form id="uploadFileForm" action="{{ url_for('upload_file', repo_name=repo_name) }}" method="post"
                     enctype="multipart/form-data">
                     <input type="hidden" name="path" value="{{ path }}">
@@ -448,7 +380,7 @@
                         <label for="fileInput" class="form-label">Välj fil</label>
                         <input type="file" name="file" id="fileInput" class="form-control" required>
                     </div>
-                    <button type="submit" class="btn btn-primary">Ladda upp</button>
+                    <button type="submit" class="btn btn-primary" onclick="loadingSpinner(true)">Ladda upp</button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
                 </form>
             </div>
@@ -466,7 +398,8 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted">Den nya mappen kommer att skapas i:<br> "<span id="folderPath">/</span>".</p>
+                <p class="text-muted">Den nya mappen kommer att skapas i:</p>
+                <div id="folderPath" class="p-1 mt-2 mb-5 bg-warning rounded-3">/</div>
                 <form id="createFolderForm" action="{{ url_for('create_folder', repo_name=repo_name) }}" method="post">
                     <input type="hidden" name="path" value="{{ path }}">
                     <input type="hidden" name="owner" value="{{ owner }}">
@@ -475,7 +408,7 @@
                         <input type="text" name="folder_name" id="folderName" class="form-control"
                             placeholder="Ny mappnamn" required>
                     </div>
-                    <button type="submit" class="btn btn-primary">Skapa mapp</button>
+                    <button type="submit" class="btn btn-primary" onclick="loadingSpinner(true)">Skapa mapp</button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Avbryt</button>
                 </form>
             </div>
@@ -502,7 +435,7 @@
             <p class="h3">Granska fil</p>
             <p class="filepathlabel small"></p>
             <textarea id="viewFileContent" class="file-content" disabled></textarea>
-            <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
+            <button id="closeEditModal" type="button" class="btn btn-danger">Avbryt</button>
         </div>
 
         <div id="FileContent" class="tabcontent">
@@ -513,8 +446,8 @@
                 <input type="hidden" name="owner" id="owner" value="{{ owner }}">
                 <textarea name="content" id="editFileContent"></textarea>
                 <br>
-                <button type="submit">Spara ändringar</button>
-                <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
+                <button type="button" class="saveBtn btn btn-primary" data-action="rawEdit">Spara ändringar</button>
+                <button id="closeEditModal" type="button" class="btn btn-danger">Avbryt</button>
             </form>
         </div>
 
@@ -565,18 +498,38 @@
                 <ul id="pointsList"></ul>
                 <br>
             </div>
-            <button id="saveBtn">Spara ändringar</button>
-            <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
+            <button type="button" class="saveBtn btn btn-primary" data-action="editPointCode">Spara ändringar</button>
+            <button id="closeEditModal" type="button" class="btn btn-danger">Avbryt</button>
         </div>
 
         <div id="Map" class="tabcontent">
             <h3>Karta</h3>
             <div id="map"></div>
-            <button type="button" class="close-btn" id="closeEditModal">Avbryt</button>
+            <button id="closeEditModal" type="button" class="btn btn-danger">Avbryt</button>
         </div>
 
+    </div>
+</div>
 
+<!-- Varningsmodal -->
+<div class="modal fade" id="warningModal" tabindex="-1" role="dialog" aria-labelledby="warningModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class=" modal-title" id="warningModalLabel">Varning!</h5>
 
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Innan du sparar så måste du försäkra att Inmätningsutrustningen är avstängd.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="confirmSaveBtn">Jag har stängt av
+                    utrustningen</button>
+                <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Avbryt</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -598,14 +551,18 @@
 
 {% block scripts %}
 <script>
-    function getPath() {
+    function getPath(includeSlash = false) {
         // Get the current page path
         let myElement = document.getElementById('path');
+        var path = "";
         if (myElement) {
-            let path = myElement.getAttribute('data-path');
-            return path;
+            path = myElement.getAttribute('data-path');
+        }
+
+        if (includeSlash == true && path != "/") {
+            return "/" + path + "/"
         } else {
-            return "/"
+            return path;
         }
     }
 </script>
@@ -618,7 +575,7 @@
         var form = document.getElementById('createFolderForm');
         var hiddenInput = form.querySelector('input[name="path"]');
         hiddenInput.value = getPath();
-        createFolderElement.querySelector('#folderPath').textContent = getPath();
+        createFolderElement.querySelector('#folderPath').textContent = getPath(true);
         console.log(hiddenInput.value);
         createDirModal.show();
     }
@@ -632,7 +589,7 @@
         var form = document.getElementById('uploadFileForm');
         var hiddenInput = form.querySelector('input[name="path"]');
         hiddenInput.value = getPath();
-        uploadFileElement.querySelector('#folderPath').textContent = getPath();
+        uploadFileElement.querySelector('#folderPath').textContent = getPath(true);
         console.log(hiddenInput.value);
         uploadFileModal.show();
     }
@@ -652,11 +609,9 @@
         var sha = "{{ request.args.get('sha', 'HEAD') }}";
         var treeList = document.getElementById("treeList");
         treeList.innerHTML = ''; // Töm listan
-        const loadingSpinner = document.getElementById('loading-spinner');
+
         // Visa laddar-symbolen
-        loadingSpinner.style.display = 'flex';
-        const overlay = document.getElementById('overlay');
-        overlay.style.display = "block";
+        loadingSpinner(true);
 
         fetch(`{{ url_for('search_repo', repo_name=repo_name, owner=owner) }}?q=${searchTerm}&sha=${sha}`)
             .then(response => response.json())
@@ -681,8 +636,7 @@
             .catch(error => console.error('Error:', error))
             .finally(() => {
                 // Dölj laddar-symbolen
-                loadingSpinner.style.display = 'none';
-                overlay.style.display = "none";
+                loadingSpinner(false);
             });
     });
 
@@ -1072,19 +1026,46 @@
         }
     }
 
-    document.getElementById('saveBtn').addEventListener('click', () => {
+
+    let editFilePageWhenSaving = '';  // Variabel för att hålla koll på vilken knapp som trycktes
+    // Spara ändringar i filen.
+    document.querySelectorAll(".saveBtn").forEach(function (button) {
+        button.addEventListener("click", function () {
+
+            editFilePageWhenSaving = button.getAttribute('data-action');
+            // Visa varningsmodalen
+            var warningModal = document.getElementById('warningModal');
+            var modal = new bootstrap.Modal(warningModal);
+            modal.show();
+        });
+    });
+
+    // Användaren har bekräftat, så nu kan vi skicka formuläret
+    document.getElementById("confirmSaveBtn").addEventListener("click", function () {
+        editFileSave();
+    });
+
+    // document.getElementById('saveBtn').addEventListener('click', () => {
+    function editFileSave() {
         // Bygg upp den data som ska skickas till servern
         const form = document.getElementById('editFileForm');
-        document.getElementById('editFileContent').value = JSON.stringify(currentPointData);
 
-        // Skicka formuläret
+        // Kontrollera vilken sida som lagrades när spara knappen trycktes
+        if (editFilePageWhenSaving === 'editPointCode') {
+            document.getElementById('editFileContent').value = JSON.stringify(currentPointData);
+        }
+
+        loadingSpinner(true);
+
+        // Skicka formuläret till servern som returnerar en ny sida.
         form.submit();
 
+        // Vi kommer aldrig behöva uppdatera denna edit eftersom vi skickas till en ny sida.
         document.getElementById('viewFileContent').value = JSON.stringify(currentPointData);
         document.getElementById("mapTab").click();
         displayMap(currentPointData);
         document.getElementById("editCode").click();
-    });
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
         const pointsList = document.getElementById('pointsList');
@@ -1180,6 +1161,7 @@
 
             // Öppna den första fliken som standard
             document.getElementById("defaultOpen").click();
+            loadingSpinner(true);
 
             fetch(`{{ url_for('get_file_content', repo_name=repo_name, owner=owner) }}?path=${filePath}`)
                 .then(response => response.json())
@@ -1209,7 +1191,10 @@
                     // Öppna den första fliken som standard
                     document.getElementById("defaultOpen").click();
                 })
-                .catch(error => console.error('Error:', error));
+                .catch(error => console.error('Error:', error))
+                .finally(() => {
+                    loadingSpinner(false);
+                });
         }
     });
 
@@ -1246,10 +1231,7 @@
         const treeContainer = document.querySelector('.tree');
 
         // Visa laddar-symbolen
-        const loadingSpinner = document.getElementById('loading-spinner');
-        loadingSpinner.style.display = 'flex'; // Flex för att använda flexbox
-        const overlay = document.getElementById('overlay');
-        overlay.style.display = "block";
+        loadingSpinner(true);
 
         fetch(url, {
             headers: {
@@ -1260,13 +1242,11 @@
             .then(html => {
                 // Uppdatera innehållet
                 treeContainer.innerHTML = html;
-                treeContainer.appendChild(loadingSpinner); // Lägg tillbaka laddar-symbolen i DOM:en
             })
             .catch(error => console.error('Error:', error))
             .finally(() => {
                 // Dölj laddar-symbolen
-                loadingSpinner.style.display = 'none';
-                overlay.style.display = 'none';
+                loadingSpinner(false);
             });
     };
 </script>
