@@ -19,8 +19,10 @@ from requests_oauthlib import OAuth2Session
 
 try:
     from src.crd_reader import crd_to_json, json_to_crd
+    from src.rw5_reader import read_rw5_data
 except ImportError:
     from crd_reader import crd_to_json, json_to_crd
+    from rw5_reader import read_rw5_data
 
 load_dotenv()
 
@@ -205,6 +207,7 @@ def repo_content(owner, repo_name, path):
             for item in contents
             if item["type"] == "dir" and not item["name"].startswith(".")
         ]
+        projects = [item for item in contents if item["name"].endswith(".crd")]
         session["owner"] = owner  # Spara ägarnamnet i sessionen
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
@@ -216,6 +219,7 @@ def repo_content(owner, repo_name, path):
                 current_paths=current_paths,
                 files=files,
                 dirs=dirs,
+                projects=projects,
             )
         else:
             return render_template(
@@ -226,6 +230,7 @@ def repo_content(owner, repo_name, path):
                 current_paths=current_paths,
                 files=files,
                 dirs=dirs,
+                projects=projects,
             )
     except HTTPError as http_err:
         flash(f"HTTP-fel vid hämtning av repository-innehåll: {http_err}", "danger")
@@ -341,28 +346,66 @@ def upload_file(repo_name):
     )
 
 
+def fetch_file_content(owner, repo_name, path):
+    """
+    Hämtar och avkodar innehållet i en fil från Gitea API.
+
+    :param owner: Ägaren av repot (repository)
+    :param repo_name: Namnet på repot
+    :param path: Sökvägen till filen i repot
+    :return: Avkodat innehåll av filen
+    :raises HTTPError: Om det uppstår fel vid API-anropet
+    """
+    try:
+        # Förbered förfrågan med OAuth2-sessionen
+        before_request()  # Om det behövs för att uppdatera tokens
+        gitea = OAuth2Session(client_id, token=session["oauth_token"])
+
+        # Gör GET-förfrågan till Gitea API för att hämta filen
+        response = gitea.get(
+            f"{api_base_url}/repos/{owner}/{repo_name}/contents/{path}"
+        )
+        response.raise_for_status()  # Om svaret indikerar ett HTTP-fel kastas ett undantag
+
+        # Hämta och avkoda filens innehåll
+        file_data = response.json()
+        file_content = base64.b64decode(file_data["content"])
+        return file_content
+
+    except HTTPError as http_err:
+        # Om det uppstår ett HTTP-fel, kan vi logga eller hantera det
+        raise http_err
+    except Exception as e:
+        # Andra potentiella fel, t.ex. avkodningsfel
+        raise e
+
+
 @app.route("/repo/<owner>/<repo_name>/get_file_content", methods=["GET"])
 def get_file_content(repo_name, owner):
     path = request.args.get("path", "")
+    editProject = request.args.get("editProject", "")
+    editProject = True if editProject.lower() == "true" else False
     if not path:
         return jsonify({"error": "Ingen fil angiven."}), 400
 
     try:
-        before_request()
-        gitea = OAuth2Session(client_id, token=session["oauth_token"])
-        response = gitea.get(
-            f"{api_base_url}/repos/{owner}/{repo_name}/contents/{path}"
-        )
-        response.raise_for_status()
-
-        file_data = response.json()
-        file_content = base64.b64decode(file_data["content"])
+        # Hämta innehållet för den begärda filen
+        file_content = fetch_file_content(owner, repo_name, path)
 
         # Kontrollera om filen är en CRD-fil
-        if path.endswith(".crd"):
+        if editProject or path.endswith(".crd"):
             # Konvertera CRD-filens innehåll till JSON
             file_content_json = crd_to_json(file_content)
-            return jsonify({"content": file_content_json})
+
+            # Hämta .rw5-filens innehåll
+            rw5_path = path.replace(".crd", ".rw5")
+            rw5_content = fetch_file_content(owner, repo_name, rw5_path)
+
+            # Bearbeta innehållet i .rw5-filen
+            rw5_result = read_rw5_data(rw5_content.decode("utf-8", errors="ignore"))
+
+            # Returnera båda resultaten
+            return jsonify({"content": file_content_json, "info": rw5_result})
         else:
             # För icke-CRD-filer, returnera innehållet som text
             file_content = file_content.decode("utf-8", errors="ignore")

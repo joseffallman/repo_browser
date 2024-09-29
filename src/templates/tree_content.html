@@ -1,3 +1,21 @@
+{% if projects %}
+<div class="card">
+    <div class="card-body">
+        <span>Denna mapp innehåller följande projekt:</span>
+        <form action="{{ url_for('repo_content', owner=owner, repo_name=repo_name) }}" method="post" id="editProject">
+            <select name="project" id="project" class="form-select form-select-lg mb-3">
+                {% for project in projects %}
+                <option value='{{project | tojson }}'>{{project.name}}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Redigera projekt</button>
+            <button type="button" id="exportProject">Exportera</button>
+        </form>
+    </div>
+</div>
+<hr>
+{% endif %}
+
 {% if path %}
 <span id="path" data-path="{{path}}"></span>
 <span class="folder"><a href="{{ url_for('repo_content', owner=owner, repo_name=repo_name, path='') }}">Root</a></span>

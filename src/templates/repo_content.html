@@ -92,14 +92,26 @@
         padding-top: 60px;
     }
 
+    @media (max-width: 800px) {
+        .modal {
+            padding-top: 0px;
+        }
+    }
+
     .modal-content {
         background-color: #fefefe;
-        margin: 5% auto;
+        margin: 0px auto;
         padding: 5px;
         border: 1px solid #888;
         width: 100%;
         max-width: 800px;
         text-align: center;
+    }
+
+    @media (max-width: 800px) {
+        .modal-content {
+            height: 100%;
+        }
     }
 
     .search-modal-content {
@@ -725,7 +737,7 @@
     }
 
     // Funktion för att visa en Leaflet-karta
-    function displayMap(fileContent) {
+    function displayMap(fileContent, sourceProjection = "EPSG:3006") {
         if (map) {
             map.remove();
         }
@@ -743,7 +755,7 @@
 
         // Loopar igenom punkterna och lägger till dem på kartan
         fileContent.points.forEach(point => {
-            const wgs84Coords = convertToWGS84(point.nor, point.eas);
+            const wgs84Coords = convertToWGS84(point.nor, point.eas, sourceProjection);
             const latLng = [wgs84Coords[1], wgs84Coords[0]]; // [lat, long]
 
             const marker = L.marker(latLng).addTo(map); // [lat, long]
@@ -1059,12 +1071,6 @@
 
         // Skicka formuläret till servern som returnerar en ny sida.
         form.submit();
-
-        // Vi kommer aldrig behöva uppdatera denna edit eftersom vi skickas till en ny sida.
-        document.getElementById('viewFileContent').value = JSON.stringify(currentPointData);
-        document.getElementById("mapTab").click();
-        displayMap(currentPointData);
-        document.getElementById("editCode").click();
     }
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -1142,59 +1148,112 @@
 
 <script>
     // Öppna redigeringsmodalen
+    function openEditModal(filePath, editProject = false) {
+        document.getElementById("mapTab").style.display = "none";
+        document.getElementById("editCode").style.display = "none";
+        document.getElementById("editTab").style.display = "inline-block";
+        document.getElementById('editFilePath').value = "";
+        document.getElementById('editFileContent').value = "";
+        document.getElementById('viewFileContent').value = "";
+        document.getElementById('editFileModal').style.display = 'block';
+
+
+        const filepathLabels = document.querySelectorAll('.filepathlabel');
+        filepathLabels.forEach(element => {
+            element.innerHTML = "";
+        });
+
+        // Öppna den första fliken som standard
+        document.getElementById("defaultOpen").click();
+        loadingSpinner(true);
+
+        if (editProject) {
+            document.getElementById("editTab").style.display = "none";
+        }
+
+        fetch(`{{ url_for('get_file_content', repo_name=repo_name, owner=owner) }}?path=${filePath}&editProject=${editProject}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('editFilePath').value = filePath;
+                document.getElementById('editFileContent').value = data.content;
+                document.getElementById('viewFileContent').value = data.content;
+                filepathLabels.forEach(element => {
+                    element.innerHTML = filePath;
+                });
+
+
+                // Kolla om filen är en .crd fil
+                if (editProject) {
+                    document.getElementById("mapTab").style.display = "inline-block";
+                    document.getElementById("editCode").style.display = "inline-block";
+                    //openTab(null, 'Map');  // Öppna kartfliken
+                    document.getElementById("mapTab").click();
+                    displayMap(JSON.parse(data.content), data.info.CRS);  // Visa kartan
+                    setCurrentPointData(JSON.parse(data.content)); // Visa punktdatan
+                    renderPointsList(); // Visa punktkodslista
+                    document.getElementById("editCode").click();
+                } else {
+                    document.getElementById("mapTab").style.display = "none";
+                    document.getElementById("editCode").style.display = "none";
+                    //openTab(null, 'FileContent');  // Öppna filfliken
+                    // Öppna den första fliken som standard
+                    document.getElementById("defaultOpen").click();
+                }
+            })
+            .catch(error => console.error('Error:', error))
+            .finally(() => {
+                loadingSpinner(false);
+            });
+
+    };
+
+
+    function exportProject(filePath) {
+        const originalString = filePath;
+        const newFilePath = originalString.replace(/\.crd$/, ".rw5");
+
+        // Show loading spinner.
+        loadingSpinner(true);
+
+        fetch(`{{ url_for('get_file_content', repo_name=repo_name, owner=owner) }}?path=${newFilePath}`)
+            .then(response => response.json())
+            .then(data => {
+                const newFileContent = data.content.concat(" ");// Bygg upp den data som ska skickas till servern
+                const form = document.getElementById('editFileForm');
+                document.getElementById('editFileContent').value = newFileContent;
+                document.getElementById('editFilePath').value = newFilePath;
+                form.submit();
+            })
+            .finally(() => {
+                loadingSpinner(false);
+            });
+    }
+
     document.querySelector('.tree').addEventListener('click', function (event) {
         if (event.target.classList.contains('edit-file-link')) {
             event.preventDefault();
             const filePath = event.target.dataset.filepath;
-            document.getElementById("mapTab").style.display = "none";
-            document.getElementById("editCode").style.display = "none";
-            document.getElementById('editFilePath').value = "";
-            document.getElementById('editFileContent').value = "";
-            document.getElementById('viewFileContent').value = "";
-            document.getElementById('editFileModal').style.display = 'block';
+            openEditModal(filePath);
+        }
+    });
 
+    document.addEventListener('submit', function (event) {
+        // Kontrollera att det är formuläret med id 'editProject'
+        if (event.target && event.target.id === 'editProject') {
 
-            const filepathLabels = document.querySelectorAll('.filepathlabel');
-            filepathLabels.forEach(element => {
-                element.innerHTML = "";
-            });
+            event.preventDefault();
+            const selectedOption = document.getElementById("editProject").elements["project"].value;
+            const project = JSON.parse(selectedOption);
+            openEditModal(project.path, editProject = true);
+        }
+    });
 
-            // Öppna den första fliken som standard
-            document.getElementById("defaultOpen").click();
-            loadingSpinner(true);
-
-            fetch(`{{ url_for('get_file_content', repo_name=repo_name, owner=owner) }}?path=${filePath}`)
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('editFilePath').value = filePath;
-                    document.getElementById('editFileContent').value = data.content;
-                    document.getElementById('viewFileContent').value = data.content;
-                    filepathLabels.forEach(element => {
-                        element.innerHTML = filePath;
-                    });
-
-
-                    // Kolla om filen är en .crd fil
-                    if (filePath.endsWith('.crd')) {
-                        document.getElementById("mapTab").style.display = "inline-block";
-                        document.getElementById("editCode").style.display = "inline-block";
-                        //openTab(null, 'Map');  // Öppna kartfliken
-                        document.getElementById("mapTab").click();
-                        displayMap(JSON.parse(data.content));  // Visa kartan
-                        setCurrentPointData(JSON.parse(data.content)); // Visa punktdatan
-                        renderPointsList(); // Visa punktkodslista
-                    } else {
-                        document.getElementById("mapTab").style.display = "none";
-                        document.getElementById("editCode").style.display = "none";
-                        //openTab(null, 'FileContent');  // Öppna filfliken
-                    }
-                    // Öppna den första fliken som standard
-                    document.getElementById("defaultOpen").click();
-                })
-                .catch(error => console.error('Error:', error))
-                .finally(() => {
-                    loadingSpinner(false);
-                });
+    // Export project button
+    document.addEventListener('click', function (event) {
+        if (event.target && event.target.id === 'exportProject') {
+            const selectedOption = document.getElementById("editProject").elements["project"].value;
+            const project = JSON.parse(selectedOption);
+            exportProject(project.path);
         }
     });
 
