@@ -9,12 +9,12 @@ def crd_to_json(file_content):
     header = file_content[:56]  # Testa med numerisk header först
     nor, eas, elv, des = struct.unpack("<ddd32s", header)
 
-    if len(des.strip(b"\x00")) > 0:  # Numerisk fil
+    if len(des.strip(b"\x00")) > 0 and False:  # Numerisk fil
         json_data["header"] = {
             "nor": nor,
             "eas": eas,
             "elv": elv,
-            "des": des.decode("utf-8").strip(),
+            "des": des.decode("utf-8", errors="ignore").strip(),
         }
         record_size = 56
         file_type = "numeric"
@@ -23,9 +23,11 @@ def crd_to_json(file_content):
         id, date, des, format_str = struct.unpack("<d32s32s32s", header)
         json_data["header"] = {
             "id": id,
-            "date": date.strip(b"\x00").decode("utf-8").strip(),
-            "des": des.strip(b"\x00").decode("utf-8").strip(),
-            "format": format_str.strip(b"\x00").decode("utf-8").strip(),
+            "date": date.strip(b"\x00").decode("utf-8", errors="ignore").strip(),
+            "des": des.strip(b"\x00").decode("utf-8", errors="ignore").strip(),
+            "format": format_str.strip(b"\x00")
+            .decode("utf-8", errors="ignore")
+            .strip(),
         }
         record_size = 66
         file_type = "alphanumeric"
@@ -39,7 +41,7 @@ def crd_to_json(file_content):
                 "nor": nor,
                 "eas": eas,
                 "elv": elv,
-                "des": des.strip(b"\x00").decode("utf-8").strip(),
+                "des": des.strip(b"\x00").decode("utf-8", errors="ignore").strip(),
             }
         else:
             record = file_content[i : i + record_size]
@@ -48,8 +50,8 @@ def crd_to_json(file_content):
                 "nor": nor,
                 "eas": eas,
                 "elv": elv,
-                "des": des.strip(b"\x00").decode("utf-8").strip(),
-                "id": id.strip(b"\x00").decode("utf-8").strip(),
+                "des": des.strip(b"\x00").decode("utf-8", errors="ignore").strip(),
+                "id": id.strip(b"\x00").decode("utf-8", errors="ignore").strip(),
             }
         json_data["points"].append(point)
 

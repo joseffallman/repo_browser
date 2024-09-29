@@ -374,6 +374,8 @@ def fetch_file_content(owner, repo_name, path):
 
     except HTTPError as http_err:
         # Om det uppstår ett HTTP-fel, kan vi logga eller hantera det
+        # Returnera en tom sträng även om filen inte finns.
+        return b""
         raise http_err
     except Exception as e:
         # Andra potentiella fel, t.ex. avkodningsfel

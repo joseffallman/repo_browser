@@ -3,7 +3,7 @@ import re
 
 def read_rw5_data(file_content: str):
     # Skapa en dictionary för att lagra de extraherade värdena
-    extracted_data = {}
+    extracted_data = {"Date": None, "Time": None, "CRS": None, "last_point": None}
 
     # Reguljära uttryck för att plocka ut datum och tid (DT och TM)
     dates = re.findall(r"--DT(\d{2}-\d{2}-\d{4})", file_content)

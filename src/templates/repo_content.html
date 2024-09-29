@@ -736,12 +736,15 @@
         return wgs84; // Returnera [long, lat]
     }
 
-    // Funktion för att visa en Leaflet-karta
-    function displayMap(fileContent, sourceProjection = "EPSG:3006") {
+    function removeMap() {
         if (map) {
             map.remove();
         }
+    }
 
+    // Funktion för att visa en Leaflet-karta
+    function displayMap(fileContent, sourceProjection = "EPSG:3006") {
+        removeMap();
         map = L.map('map').setView([59.8586, 17.6389], 18);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1156,6 +1159,8 @@
         document.getElementById('editFileContent').value = "";
         document.getElementById('viewFileContent').value = "";
         document.getElementById('editFileModal').style.display = 'block';
+        document.getElementById('pointsList').innerHTML = "";
+        removeMap();
 
 
         const filepathLabels = document.querySelectorAll('.filepathlabel');
