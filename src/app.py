@@ -168,7 +168,11 @@ def repos():
             for repo in repos
         ]
 
-        return render_template("repos.html", repo_infos=repo_info)
+        user_info = session.get("user")
+
+        return render_template(
+            "repos.html", repo_infos=repo_info, is_admin=user_info.get("is_admin")
+        )
 
     except HTTPError as http_err:
         flash(f"HTTP-fel vid hämtning av repositories: {http_err}", "danger")
@@ -176,6 +180,74 @@ def repos():
     except Exception as e:
         flash(f"Något gick fel vid hämtning av repositories: {e}", "danger")
         return redirect(url_for("home"))
+
+
+@app.route("/admin_dashboard")
+@login_required
+def admin_dashboard():
+    try:
+        before_request()
+        gitea = OAuth2Session(client_id, token=session["oauth_token"])
+
+        # Get the list of all users
+        users = gitea.get(f"{api_base_url}/admin/users").json()
+
+    except HTTPError as http_err:
+        flash(f"HTTP-fel vid hämtning av repositories: {http_err}", "danger")
+        return redirect(url_for("home"))
+    except Exception as e:
+        flash(f"Något gick fel vid hämtning av repositories: {e}", "danger")
+        return redirect(url_for("home"))
+
+    all_user_data = []
+
+    # Loop through users and get the 5 latest commits for each
+    for user in users:
+        username = user["login"]
+        # 1. Hämta användarens aktivitetsfeed
+        activities = gitea.get(
+            f"{api_base_url}/users/{username}/activities/feeds?only-performed-by=true&page=1&limit=5"
+        ).json()
+
+        user_commits = []
+
+        for activity in activities:
+            if activity["op_type"] == "commit_repo":
+                activity_content = json.loads(activity["content"])
+                commit = activity_content["Commits"][0]
+                commit_data = {
+                    "repo": activity["repo"]["name"],
+                    "owner": activity["repo"]["owner"]["login"],
+                    "html_url": activity["repo"]["html_url"],
+                    "commit_url": f"{activity['repo']['html_url']}/commit/{commit['Sha1']}",
+                    "commit_message": commit["Message"],
+                    "commit_date": commit["Timestamp"],
+                }
+                user_commits.append(commit_data)
+                user_name = f"{commit["AuthorName"]} ({username})"
+                user_url = f"{activity['act_user']['html_url']}"
+                user_lastlogin = f"{activity['act_user']['last_login']}"
+
+        # Sortera och begränsa till de senaste 5 commits eller push-aktiviteter
+        user_commits = sorted(
+            user_commits, key=lambda x: x["commit_date"], reverse=True
+        )[:5]
+
+        user_filtered_data = {
+            "user_name": user_name,
+            "user_url": user_url,
+            "user_lastlogin": user_lastlogin,
+            "commits": user_commits,
+        }
+
+        # Lägg till användarens commits i huvudlistan
+        all_user_data.append(user_filtered_data)
+
+    # Render the commits on the dashboard
+    return render_template(
+        "admin_dashboard.html",
+        all_user_data=all_user_data,
+    )
 
 
 @app.route("/repo/<owner>/<repo_name>/contents/", defaults={"path": ""})

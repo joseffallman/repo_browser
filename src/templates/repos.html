@@ -12,6 +12,10 @@
     {% endfor %}
 </ul>
 
+{% if is_admin %}
+<a href="{{ url_for('admin_dashboard') }}">Admin dashboard</a>
+{% endif %}
+
 <div class="text-center">
     <a href="{{ url_for('logout') }}" class="btn btn-primary btn-lg">
         <i class="bi bi-github"></i> Logga ut.

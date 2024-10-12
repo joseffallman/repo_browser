@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block styles %}
+{% endblock %}
+
+{% block title %}Admin Dashboard: {% endblock %}
+{% block body %}
+<div class="container">
+    {% for user_data in all_user_data %}
+    <div class="card shadow-sm pb-3 mb-3">
+        <div class="card-header bg-primary-subtle text-primary-emphasis">
+            <h5 class="card-title">{{ user_data['user_name'] }}</h5>
+            <small class="card-subtitle">Last login: {{ user_data['user_lastlogin'] }}</small>
+        </div>
+
+        <p></p>
+        <!-- Toggle Button for Latest Commits -->
+        <button class="btn btn-link text-decoration-none" type="button" data-bs-toggle="collapse"
+            data-bs-target="#commits{{ loop.index }}" aria-expanded="false" aria-controls="commits{{ loop.index }}"
+            onclick="toggleIcon(event)">
+            <i class="bi bi-chevron-down me-2"></i>Latest commits
+        </button>
+
+        <!-- Collapse Section for Commits -->
+        <div class="collapse show" id="commits{{ loop.index }}">
+            <ul class="list-group list-group-flush mt-2">
+                {% for commit in user_data['commits'] %}
+                <li class="list-group-item justify-content-between align-items-center">
+                    <i class="fas fa-code-branch me-2"></i>
+                    <a href="{{ commit['commit_url'] }}" class="text-decoration-none">{{
+                        commit['commit_message'] }}</a>
+                    to repository
+                    <a href="{{ url_for('repo_content', owner=commit['owner'], repo_name=commit['repo']) }}"
+                        class="text-primary">
+                        {{ commit['repo'] }}</a>
+                    <div class="text-muted">{{ commit['commit_date'] }}</div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if is_admin %}
+<a href="{{ url_for('admin_dashboard') }}">Admin dashboard</a>
+{% endif %}
+
+<div class="text-center">
+    <a href="{{ url_for('logout') }}" class="btn btn-primary btn-lg">
+        <i class="bi bi-github"></i> Logga ut.
+    </a>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    function toggleIcon(event) {
+        const button = event.currentTarget;
+        const icon = button.querySelector("i");
+        icon.classList.toggle("bi-chevron-down");
+        icon.classList.toggle("bi-chevron-up");
+    }
+</script>
+{% endblock %}
