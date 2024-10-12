@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import time
+from functools import wraps
 
 from dotenv import load_dotenv
 from flask import (
@@ -68,6 +69,19 @@ def inject_global_variables():
 @app.route("/")
 def home():
     return render_template("home.html")
+
+
+def login_required(f):
+    """Decorator to ensure access token exists before accessing route."""
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if "oauth_token" not in session or "user" not in session:
+            flash("Du måste vara inloggad först.", "danger")
+            return redirect(url_for("home"))
+        return f(*args, **kwargs)
+
+    return decorated_function
 
 
 @app.route("/login")
@@ -252,6 +266,7 @@ def admin_dashboard():
 
 @app.route("/repo/<owner>/<repo_name>/contents/", defaults={"path": ""})
 @app.route("/repo/<owner>/<repo_name>/contents/<path:path>")
+@login_required
 def repo_content(owner, repo_name, path):
     try:
         before_request()
@@ -313,6 +328,7 @@ def repo_content(owner, repo_name, path):
 
 
 @app.route("/repo/<repo_name>/create_folder", methods=["POST"])
+@login_required
 def create_folder(repo_name):
     folder_name = request.form.get("folder_name")
     path = request.form.get("path", "")
@@ -355,6 +371,7 @@ def create_folder(repo_name):
 
 
 @app.route("/repo/<repo_name>/upload_file", methods=["POST"])
+@login_required
 def upload_file(repo_name):
     uploaded_file = request.files.get("file")
     path = request.form.get("path", "")
@@ -455,6 +472,7 @@ def fetch_file_content(owner, repo_name, path):
 
 
 @app.route("/repo/<owner>/<repo_name>/get_file_content", methods=["GET"])
+@login_required
 def get_file_content(repo_name, owner):
     path = request.args.get("path", "")
     editProject = request.args.get("editProject", "")
@@ -491,6 +509,7 @@ def get_file_content(repo_name, owner):
 
 
 @app.route("/repo/<repo_name>/edit_file", methods=["POST"])
+@login_required
 def edit_file(repo_name):
     path = request.form.get("path", "")
     owner = request.form.get("owner", "")
@@ -557,6 +576,7 @@ def edit_file(repo_name):
 
 
 @app.route("/repo/<owner>/<repo_name>/search", methods=["GET"])
+@login_required
 def search_repo(owner, repo_name):
     search_term = request.args.get("q", "").lower()
     sha = request.args.get("sha", "HEAD")
