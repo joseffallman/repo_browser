@@ -2,7 +2,7 @@
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v10.2.1/ol.css">
 <style>
     /* GitHub-liknande filstruktur */
     .file-list {
@@ -319,6 +319,58 @@
         margin-top: 10px;
     }
 </style>
+
+<style>
+    /* Styles for the Kartan  */
+    /* Styla popup-elementet som en pratbubbla */
+    .ol-popup {
+        background-color: white;
+        border-radius: 10px;
+        padding: 10px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+        position: relative;
+        bottom: 12px;
+        border: 1px solid #cccccc;
+        min-width: 150px;
+    }
+
+    /* Skapa en liten triangel som blir "svansen" på pratbubblan */
+    .ol-popup:after {
+        content: '';
+        position: absolute;
+        bottom: -30px;
+        left: 50%;
+        margin-left: -15px;
+        border-width: 15px;
+        border-style: solid;
+        border-color: white transparent transparent transparent;
+    }
+
+    /* Om du vill ändra färgen på pratbubblan kan du ändra här */
+    .ol-popup:before {
+        content: '';
+        position: absolute;
+        bottom: -38px;
+        left: 50%;
+        margin-left: -19px;
+        border-width: 19px;
+        border-style: solid;
+        border-color: #cccccc transparent transparent transparent;
+    }
+
+    .ol-zoom button {
+        padding: 0px;
+        color: grey;
+    }
+
+    .ol-attribution li {
+        background: none;
+    }
+
+    #map-info-filter {
+        padding: 0 20px;
+    }
+</style>
 {% endblock %}
 
 {% block title %}Innehåll i projekt: {{ repo_name }}{% endblock %}
@@ -517,6 +569,8 @@
         <div id="Map" class="tabcontent">
             <h3>Karta</h3>
             <div id="map"></div>
+            <span id="map-info-filter" class="text-secondary fw-lighter"></span>
+            <button type="button" class="btn btn-primary" onclick="fitMarkers()">Återställ zoomnivå</button>
             <button id="closeEditModal" type="button" class="btn btn-danger">Avbryt</button>
         </div>
 
@@ -675,16 +729,7 @@
     });
 </script>
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<!-- Proj4JS Library -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.6.2/proj4.js"></script>
-<!-- Proj4Leaflet Library -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4leaflet/1.0.2/proj4leaflet.js"></script>
-
 <script>
-    // Kontrollera om kartan redan är skapad
-    let map;
-
     // Funktion för att öppna en flik
     function openTab(evt, tabName) {
         var i, tabcontent, tablinks;
@@ -704,18 +749,20 @@
         // Visa nu vald flik och lägg till 'active' klassen på den valda knappen
         document.getElementById(tabName).style.display = "block";
         evt.currentTarget.className += " active";
-    }
 
-    // Funktion för att skapa rätt crs
-    function crs(fileContent) {
-        var crs = new L.Proj.CRS('EPSG:3006',
-            '+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
-            {
-                resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5, 0.25, 0.125],
-                origin: [0, 0]
-            });
-        return crs;
+        if (tabName == "Map") {
+            fitMarkers();
+        };
     }
+</script>
+
+<!-- OpenLayers library -->
+<script src="https://cdn.jsdelivr.net/npm/ol@v10.2.1/dist/ol.js"></script>
+<!-- Proj4JS Library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.12.1/proj4.js"></script>
+
+<script>
+    // --==( KARTAN och dess funktioner )==--
 
     // Definiera SWEREF 99 TM (EPSG:3006)
     proj4.defs("EPSG:3006", "+proj=utm +zone=33 +ellps=GRS80 +units=m +no_defs");
@@ -726,54 +773,133 @@
     // Definiera SWEREF 99 15 00 (EPSG:3008)
     proj4.defs("EPSG:3008", "+proj=utm +zone=15 +ellps=GRS80 +units=m +no_defs");
 
-    // Funktion för att konvertera SWEREF 99 TM till WGS84
-    function convertToWGS84(nor, eas, sourceProjection) {
-        // Kontrollera om sourceProjection är definierad, annars använd standard (EPSG:3006)
-        const sourceProj = sourceProjection || "EPSG:3006";
+    // Registrera proj4 i OpenLayers
+    ol.proj.proj4.register(proj4);
 
-        const sourceCoords = [eas, nor]; // Ordning: [easting, northing]
-        const wgs84 = proj4(sourceProj, "EPSG:4326", sourceCoords); // Konvertera till WGS84
-        return wgs84; // Returnera [long, lat]
+    // Skapa kartan
+    var map = new ol.Map({
+        target: 'map',
+        layers: [
+            new ol.layer.Tile({
+                source: new ol.source.OSM()
+            })
+        ],
+        view: new ol.View({
+            center: ol.proj.fromLonLat([17.6389, 59.8586]), // WGS84 center (long, lat)
+            zoom: 18,
+            maxZoom: 30,
+        })
+    });
+
+    var markersLayer = new ol.layer.Vector({
+        source: new ol.source.Vector(),
+    });
+    map.addLayer(markersLayer);
+    var projCRS = "EPSG:3006";
+
+    // Skala-linje kontroll
+    const scaleLineControl = new ol.control.ScaleLine({
+        units: 'metric', // Använd meter/kilometer
+        minWidth: 100,   // Minsta bredd för skala-linjen
+    });
+
+    // Lägg till skala-linjen till kartan
+    map.addControl(scaleLineControl);
+
+
+    function removeMarker() {
+        markersLayer.getSource().clear(); // Rensar alla markörer
     }
 
-    function removeMap() {
-        if (map) {
-            map.remove();
+    function fitMarkers() {
+        const extent = markersLayer.getSource().getExtent();
+        // Kontrollera om extenten är giltig (inte innehåller Infinity)
+        if (!extent.some(value => !isFinite(value))) {
+            map.updateSize();
+
+            //Padding (in pixels) to be cleared inside the view. Values in the array are top, right, bottom and left padding.
+            const padding = [20, 20, 20, 20];
+
+            map.getView().fit(extent, { size: map.getSize(), padding });
+        } else {
         }
     }
 
-    // Funktion för att visa en Leaflet-karta
-    function displayMap(fileContent, sourceProjection = "EPSG:3006") {
-        removeMap();
-        map = L.map('map').setView([59.8586, 17.6389], 18);
+    function setProjection(projection = projCRS) {
+        if (projCRS != projection) {
+            projCRS = projection;
+        }
+        return;
+    }
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 25,
-            maxNativeZoom: 19
-        }).addTo(map);
+    function displayMap(fileContent) {
 
-        // Skapa en array för att hålla alla koordinater
-        const bounds = [];
+        var featuresToAdd = [];
+        var totalPoints = 0;
+        var showCount = 0;
 
         // Loopar igenom punkterna och lägger till dem på kartan
         fileContent.points.forEach(point => {
-            const wgs84Coords = convertToWGS84(point.nor, point.eas, sourceProjection);
-            const latLng = [wgs84Coords[1], wgs84Coords[0]]; // [lat, long]
+            totalPoints++;
+            if (!filterPoint(point)) {
+                return;
+            }
+            showCount++;
+            var sourceCoords = [parseFloat(point.eas.toFixed(4)), parseFloat(point.nor.toFixed(4))];
+            sourceCoords = ol.proj.transform(sourceCoords, projCRS, 'EPSG:3857');
 
-            const marker = L.marker(latLng).addTo(map); // [lat, long]
-            marker.bindPopup(`ID:<b>${point.id}</b><br>Kod:<b>${point.des}</b><br>N: ${point.nor}<br>E: ${point.eas}`, { autoPan: false });
-            // Öppna popupen när markören klickas
-            marker.on('click', function () {
-                marker.openPopup();
+            // Skapa en markör (feature) och lägg till den i vektorkällan
+            const marker = new ol.Feature({
+                geometry: new ol.geom.Point(sourceCoords),
+                type: 'marker',
+                id: point.id,
+                description: point.des,
+                northing: point.nor,
+                easting: point.eas
             });
+            featuresToAdd.push(marker);
 
-            // Lägg till koordinaterna i bounds-arrayen
-            bounds.push(latLng);
         });
 
-        map.fitBounds(bounds, { padding: [20, 20] });
+        // Lägg till alla punkter till vektorkällan
+        markersLayer.getSource().addFeatures(featuresToAdd);
+
+        if (showCount < totalPoints) {
+            // Visa ett meddelande om antalet punkter som visas
+            var message = "Filter aktivt. Visar " + showCount + "/" + totalPoints + " punkter.";
+            document.getElementById('map-info-filter').innerHTML = message;
+        } else {
+            document.getElementById('map-info-filter').innerHTML = "Visar " + totalPoints + " punkter.";
+        }
+
+        fitMarkers();
     }
+
+    // Skapa popup-elementet
+    const popupElement = document.createElement('div');
+    popupElement.className = 'ol-popup'; // Lägg till popup-styling
+
+    const popup = new ol.Overlay({
+        element: popupElement,
+        positioning: 'bottom-center',
+        stopEvent: false,
+        offset: [0, -15],
+    });
+    map.addOverlay(popup);
+
+    // Hantera popup vid klick på markör
+    map.on('click', function (evt) {
+        const feature = map.forEachFeatureAtPixel(evt.pixel, function (feature) {
+            return feature;
+        });
+        if (feature) {
+            const coords = feature.getGeometry().getCoordinates();
+            popup.getElement().innerHTML = `ID:<b>${feature.get('id')}</b><br>Kod:<b>${feature.get('description')}</b>`;
+            popup.setPosition(coords);
+        } else {
+            popup.setPosition(undefined);
+        }
+    });
 </script>
 <script>
     // Funktioner för att hantera listan över punktkoderna.
@@ -798,6 +924,20 @@
     function setCurrentPointData(fileContent) {
         currentPointData = fileContent; // Spara data i den globala variabeln
         document.getElementById('newDes').value = ''; // Sätt textfältet till tomma
+    }
+
+    function filterActive() {
+        const minIdInput = document.getElementById('minId');
+        const maxIdInput = document.getElementById('maxId');
+        const filterByDesInput = document.getElementById('filterByDes');
+
+        const applyIdFilter = document.getElementById('idFilterCheck').checked;
+        const applyDesFilter = document.getElementById('desFilterCheck').checked;
+
+        return (
+            (applyDesFilter && filterByDesInput !== '') &&
+            (applyIdFilter && (minIdInput !== '' || maxIdInput !== ''))
+        );
     }
 
     function filterPoint(point) {
@@ -857,6 +997,11 @@
     // Event listener för att tillämpa filter
     document.getElementById('applyFilterBtn').addEventListener('click', () => {
         renderPointsList(); // Tillämpa filtren på listan
+
+        // Uppdatera markeringarna på kartan
+        removeMarker();
+        displayMap(currentPointData);
+
         filterModal.style.display = 'none'; // Stäng filterdialogen
     });
 
@@ -1160,7 +1305,7 @@
         document.getElementById('viewFileContent').value = "";
         document.getElementById('editFileModal').style.display = 'block';
         document.getElementById('pointsList').innerHTML = "";
-        removeMap();
+        removeMarker();
 
 
         const filepathLabels = document.querySelectorAll('.filepathlabel');
@@ -1193,7 +1338,8 @@
                     document.getElementById("editCode").style.display = "inline-block";
                     //openTab(null, 'Map');  // Öppna kartfliken
                     document.getElementById("mapTab").click();
-                    displayMap(JSON.parse(data.content), data.info.CRS);  // Visa kartan
+                    setProjection(data.info.CRS);
+                    displayMap(JSON.parse(data.content));  // Visa kartan
                     setCurrentPointData(JSON.parse(data.content)); // Visa punktdatan
                     renderPointsList(); // Visa punktkodslista
                     document.getElementById("editCode").click();
