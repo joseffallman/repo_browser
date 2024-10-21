@@ -879,6 +879,53 @@
     const popupElement = document.createElement('div');
     popupElement.className = 'ol-popup'; // Lägg till popup-styling
 
+    // Lägg till knappar för föregående och nästa
+    const prevButton = document.createElement('button');
+    prevButton.innerHTML = '◀ Föregående';
+    prevButton.style.marginRight = '10px';
+    prevButton.style.padding = '2px';
+    prevButton.onclick = function () {
+        if (currentFeatureIndex > 0) {
+            currentFeatureIndex--;
+            updatePopupContent();
+        }
+
+        if (currentFeatureIndex == 0) {
+            prevButton.disabled = true;
+        } else {
+            nextButton.disabled = false;
+        }
+    };
+
+    const nextButton = document.createElement('button');
+    nextButton.innerHTML = 'Nästa ▶';
+    nextButton.style.marginLeft = '10px';
+    nextButton.style.padding = '2px';
+    nextButton.onclick = function () {
+        if (currentFeatureIndex < foundFeatures.length - 1) {
+            currentFeatureIndex++;
+            updatePopupContent();
+        }
+
+        if (currentFeatureIndex == foundFeatures.length) {
+            nextButton.disabled = true;
+        } else {
+            prevButton.disabled = false;
+        }
+    };
+
+    // Skapa en container för knapparna
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.justifyContent = 'center';
+    buttonContainer.style.marginTop = '10px';
+    buttonContainer.style.position = 'relative';
+    buttonContainer.style.top = '5px';
+    buttonContainer.appendChild(prevButton);
+    buttonContainer.appendChild(nextButton);
+
+    popupElement.appendChild(buttonContainer);
+
     const popup = new ol.Overlay({
         element: popupElement,
         positioning: 'bottom-center',
@@ -887,16 +934,58 @@
     });
     map.addOverlay(popup);
 
+    // Hantera logiken för att bläddra mellan features
+    let currentFeatureIndex = 0;
+    let foundFeatures = [];
+
+    // Funktion för att uppdatera popup-innehållet baserat på den aktuella feature-index
+    function updatePopupContent() {
+        const feature = foundFeatures[currentFeatureIndex];
+        const coords = feature.getGeometry().getCoordinates();
+        popup.getElement().innerHTML = `ID:<b>${feature.get('id')}</b><br>Kod:<b>${feature.get('description')}</b>`;
+
+        if (foundFeatures.length > 1) {
+            // Lägg till navigationsknapparna igen efter att HTML har uppdaterats
+            popup.getElement().appendChild(buttonContainer);
+        }
+
+        // Flytta popup-positionen till den aktuella feature
+        popup.setPosition(coords);
+
+        // Hantera om knapparna ska vara inaktiva
+        prevButton.disabled = (currentFeatureIndex === 0);
+        nextButton.disabled = (currentFeatureIndex === foundFeatures.length - 1);
+    }
+
     // Hantera popup vid klick på markör
     map.on('click', function (evt) {
-        const feature = map.forEachFeatureAtPixel(evt.pixel, function (feature) {
-            return feature;
-        });
-        if (feature) {
-            const coords = feature.getGeometry().getCoordinates();
-            popup.getElement().innerHTML = `ID:<b>${feature.get('id')}</b><br>Kod:<b>${feature.get('description')}</b>`;
-            popup.setPosition(coords);
+        // Kontrollera om klicket var på popupen eller dess element
+        if (evt.originalEvent.target.closest('.ol-popup')) {
+            // Klickade på popup-elementet, stäng inte popupen
+            return;
+        }
+
+        // Definiera en buffert i pixlar
+        const bufferInPixels = 5;
+        const clickedCoordinate = evt.coordinate;
+        const mapResolution = map.getView().getResolution();
+
+        // Beräkna en buffert i koordinater baserat på resolution och bufferInPixels
+        const bufferInCoords = bufferInPixels * mapResolution;
+
+        const extentWithBuffer = ol.extent.boundingExtent([
+            [clickedCoordinate[0] - bufferInCoords, clickedCoordinate[1] - bufferInCoords],
+            [clickedCoordinate[0] + bufferInCoords, clickedCoordinate[1] + bufferInCoords]
+        ]);
+
+        foundFeatures = markersLayer.getSource().getFeaturesInExtent(extentWithBuffer);
+
+        if (foundFeatures.length > 0) {
+            currentFeatureIndex = 0;
+            prevButton.disabled = true;
+            updatePopupContent();
         } else {
+            // Dölj popup om ingen markör hittas
             popup.setPosition(undefined);
         }
     });
