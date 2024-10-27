@@ -1,3 +1,4 @@
+import json
 import re
 
 
@@ -70,3 +71,88 @@ def change_point_code(file_content: str, point_number, new_code):
 
     # Returnera ändrad fil
     return file_content
+
+
+def get_point(file_content: str, point_number: int) -> str:
+    """Get last point with id"""
+    pattern = rf"(GPS,PN{point_number}[^\n]+(?:\n--[^\n]+)*)"
+
+    matches = re.findall(pattern, file_content)
+
+    if matches:
+        return matches[-1]
+    return ""
+
+
+def get_all_points(file_content: str) -> list[str]:
+    """Get all points in file."""
+    pattern = r"(GPS,PN[^\n]+(?:\n--[^\n]+)*)"
+
+    matches = re.findall(pattern, file_content)
+
+    if matches:
+        return matches
+    return []
+
+
+def get_rw5_header(file_content: str) -> str:
+    """Retrun file header."""
+    pattern = r"JB,[^\n]+(?:\n(?:--|MO|BP|LS)[^\n]+)*"
+
+    jb = re.search(pattern, file_content)
+
+    if jb:
+        return jb.group()
+    return ""
+
+
+def change_jobb_name(file_content: str, new_name: str) -> str:
+    """Mönster för att hitta text efter "NM" och innan nästa komma"""
+    pattern = r"(NM)([^,]+)"
+    nytt_data = re.sub(pattern, rf"\1{new_name}", file_content)
+    return nytt_data
+
+
+def change_point_id(file_content: str, amount: int, old_point_id: int = None):
+    """Ändrar ID på alla punkter, eller given punkt, med angiven summa."""
+    if old_point_id:
+        # Search for only the old id
+        search_id = str(old_point_id)
+    else:
+        # Search for all numbers after PN
+        search_id = r"\d+"
+
+    pattern = rf"(,PN)({search_id})(,)"
+
+    def uppdatera_id(match):
+        prefix = match.group(1)
+        punkt_id = int(match.group(2))
+        nytt_id = punkt_id + amount
+        suffix = match.group(3)
+        return f"{prefix}{nytt_id}{suffix}"
+
+    # Använd re.sub med uppdatera_id för att ersätta alla matchningar
+    nytt_data = re.sub(pattern, uppdatera_id, file_content)
+    return nytt_data
+
+
+def rw5_to_json(file_content: str):
+    """Get header and points from rw5 as json."""
+    json_data = {"header": {}, "points": []}
+
+    json_data["header"] = get_rw5_header(file_content)
+    json_data["points"] = get_all_points(file_content)
+
+    return json.dumps(json_data, indent=4)
+
+
+def json_to_rw5(json_data: dict):
+    """Get header and points from json as rw5."""
+
+    data = json.loads(json_data)
+
+    rw5_content = data["header"]
+    rw5_content += "\n"
+    rw5_content += "\n".join(data["points"])
+
+    return rw5_content
