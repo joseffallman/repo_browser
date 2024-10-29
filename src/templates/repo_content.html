@@ -318,6 +318,22 @@
         justify-content: space-between;
         margin-top: 10px;
     }
+
+    #saveAsModal .input-group {
+        display: flex;
+        align-items: center;
+    }
+
+    #saveAsModal .input-group input {
+        flex-grow: 1;
+        width: auto;
+        margin-bottom: 0;
+        padding: 10px;
+    }
+
+    .input-group .input-group-text {
+        padding: 10px;
+    }
 </style>
 
 <style>
@@ -508,6 +524,11 @@
             <form id="editFileForm" action="{{ url_for('edit_file', repo_name=repo_name) }}" method="post">
                 <input type="hidden" name="path" id="editFilePath">
                 <input type="hidden" name="owner" id="owner" value="{{ owner }}">
+                <select id="actionSelect" name="action" hidden>
+                    <option value="update">Update</option>
+                    <option value="create">Create</option>
+                </select>
+                <input type="hidden" name="projCRS" id="projCRS">
                 <textarea name="content" id="editFileContent"></textarea>
                 <br>
                 <button type="button" class="saveBtn btn btn-primary" data-action="rawEdit">Spara ändringar</button>
@@ -525,11 +546,11 @@
                 </span>
             </div>
             <div id="pointlistBtn">
-                <button id="updateAllBtn">Uppdatera alla</button>
-                <button id="updateSelectedBtn">Uppdatera markerade</button>
-                <button id="clearSelectionBtn">Rensa markering</button>
-                <button id="selectAllBtn">Markera alla</button>
-                <button id="filterBtn">Filter</button>
+                <button id="updateAllBtn" class="btn btn-primary">Uppdatera alla</button>
+                <button id="updateSelectedBtn" class="btn btn-primary" disabled>Uppdatera markerade</button>
+                <button id="clearSelectionBtn" class="btn btn-primary" disabled>Rensa markering</button>
+                <button id="selectAllBtn" class="btn btn-primary">Markera alla</button>
+                <button id="filterBtn" class="btn btn-primary">Filter</button>
             </div>
 
             <!-- Filter-dialogruta som visas vid klick på Filter-knappen -->
@@ -563,6 +584,7 @@
                 <br>
             </div>
             <button type="button" class="saveBtn btn btn-primary" data-action="editPointCode">Spara ändringar</button>
+            <button id="saveAsButton" type="button" class="btn btn-primary" disabled>Spara som</button>
             <button id="closeEditModal" type="button" class="btn btn-danger">Avbryt</button>
         </div>
 
@@ -593,6 +615,35 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-primary" id="confirmSaveBtn">Jag har stängt av
                     utrustningen</button>
+                <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Avbryt</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SparaSomModal -->
+<div class="modal fade" id="saveAsModal" tabindex="-1" role="dialog" aria-labelledby="saveAsModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-primary">
+                <h5 class=" modal-title" id="saveAsModalLabel">Spara till ny!</h5>
+
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Ange ett namn på den nya filen som du vill spara de filtrerade punkterna till.</p>
+                <p class="p-2 mb-3 bg-warning text-dark rounded"><span id="countSelected"
+                        class="font-weight-bold"></span> st
+                    punkter har valts!</p>
+                <div class="input-group">
+                    <input type="text" id="saveAsInput" class="form-control" placeholder="Namn på filen">
+                    <span class="input-group-text">.crd</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="saveBtn btn btn-primary" data-action="saveAsPointCode"
+                    data-bs-dismiss="modal">Spara som</button>
                 <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Avbryt</button>
             </div>
         </div>
@@ -1224,6 +1275,7 @@
             selectedItems.add(id); // Lägg till markering
             item.classList.add('selected');
         }
+        updateSaveButtonState();
     }
 
     // Rensa alla markeringar
@@ -1232,6 +1284,7 @@
         document.querySelectorAll('#pointsList li').forEach(item => {
             item.classList.remove('selected'); // Ta bort markeringsstilen
         });
+        updateSaveButtonState();
     }
 
     // Markera alla rader
@@ -1244,6 +1297,18 @@
                 item.classList.add('selected');
             } // Lägg till markeringsstilen
         });
+
+        updateSaveButtonState();
+    }
+
+    function updateSaveButtonState() {
+        // Uppdatera knapper beroende på antal valda punkter.
+        const saveButton = document.getElementById("saveAsButton");
+        const clearSelectionBtn = document.getElementById("clearSelectionBtn");
+        const updateSelectionBtn = document.getElementById("updateSelectedBtn");
+        saveButton.disabled = selectedItems.size === 0; // Avaktivera om Set är tom
+        clearSelectionBtn.disabled = selectedItems.size === 0; // Avaktivera om Set är tom
+        updateSelectionBtn.disabled = selectedItems.size === 0; // Avaktivera om Set är tom
     }
 
     // Växla mellan låst och olåst läge
@@ -1275,6 +1340,31 @@
         }
     }
 
+    // Användaren har bekräftat, så nu kan vi skicka formuläret
+    document.getElementById("saveAsButton").addEventListener("click", function () {
+
+        // Sätt den nya filnamet
+        const saveAsInput = document.getElementById('saveAsInput');
+        const filePath = document.getElementById('editFilePath').value;
+        const newFilePath = filePath.replace(/\.crd$/, "");
+        saveAsInput.value = newFilePath
+
+        // Uppdatera antalet valda punkter
+        document.getElementById('countSelected').innerText = selectedItems.size;
+
+        // Visa spara som modalen
+        var saveAsModal = document.getElementById('saveAsModal');
+        var modal = new bootstrap.Modal(saveAsModal);
+
+        // Lägg till en eventlistener som flyttar markören till slutet när modalen visas
+        saveAsModal.addEventListener('shown.bs.modal', function () {
+            const saveAsInput = document.getElementById('saveAsInput');
+            saveAsInput.focus();
+            saveAsInput.setSelectionRange(saveAsInput.value.length, saveAsInput.value.length);
+        });
+
+        modal.show();
+    });
 
     let editFilePageWhenSaving = '';  // Variabel för att hålla koll på vilken knapp som trycktes
     // Spara ändringar i filen.
@@ -1298,10 +1388,34 @@
     function editFileSave() {
         // Bygg upp den data som ska skickas till servern
         const form = document.getElementById('editFileForm');
+        const actionSelect = document.getElementById('actionSelect');
+        const projCRSInput = document.getElementById('projCRS');
+        // Uppdatera crs i formuläret.
+        projCRSInput.value = projCRS;
 
         // Kontrollera vilken sida som lagrades när spara knappen trycktes
         if (editFilePageWhenSaving === 'editPointCode') {
+            actionSelect.value = 'update';
             document.getElementById('editFileContent').value = JSON.stringify(currentPointData);
+        } else if (editFilePageWhenSaving === 'saveAsPointCode') {
+            actionSelect.value = 'create';
+
+            // Spara valda punkter till ny fil.
+            document.getElementById('editFilePath').value = document.getElementById('saveAsInput').value + ".crd";
+            // Skapa en kopia av currentPointData
+            const updatedPointData = {
+                ...currentPointData,
+                points: currentPointData.points.filter(point => selectedItems.has(point.id))
+            };
+
+            // Uppdatera editFileContent med den filtrerade kopian
+            document.getElementById('editFileContent').value = JSON.stringify(updatedPointData);
+
+            console.log(updatedPointData);
+            console.log(document.getElementById('editFilePath').value);
+            console.log(projCRSInput.value);
+            console.log(actionSelect.value);
+            return;
         }
 
         loadingSpinner(true);
