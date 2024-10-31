@@ -19,11 +19,17 @@ from requests.exceptions import HTTPError
 from requests_oauthlib import OAuth2Session
 
 try:
-    from src.crd_reader import crd_to_json, json_to_crd
-    from src.rw5_reader import read_rw5_data
+    from src.crd_reader import change_point_id, crd_to_json, get_point_len, json_to_crd
+    from src.rw5_reader import change_jobb_name as rw5changeJobbName
+    from src.rw5_reader import change_point_id as rw5changeID
+    from src.rw5_reader import get_point as rw5get_point
+    from src.rw5_reader import get_rw5_header, read_rw5_data
 except ImportError:
-    from crd_reader import crd_to_json, json_to_crd
-    from rw5_reader import read_rw5_data
+    from crd_reader import change_point_id, crd_to_json, get_point_len, json_to_crd
+    from rw5_reader import change_jobb_name as rw5changeJobbName
+    from rw5_reader import change_point_id as rw5changeID
+    from rw5_reader import get_point as rw5get_point
+    from rw5_reader import get_rw5_header, read_rw5_data
 
 load_dotenv()
 
@@ -435,6 +441,27 @@ def upload_file(repo_name):
     )
 
 
+def fetch_file_info(owner, repo_name, path):
+    """
+    Hämtar information om en fil från Gitea API.
+    """
+    try:
+        before_request()
+        gitea = OAuth2Session(client_id, token=session["oauth_token"])
+
+        # Hämta den befintliga filinformationen
+        response = gitea.get(
+            f"{api_base_url}/repos/{owner}/{repo_name}/contents/{path}"
+        )
+        response.raise_for_status()
+        file_data = response.json()
+        return file_data
+    except HTTPError as http_err:
+        raise http_err
+    except Exception as e:
+        raise e
+
+
 def fetch_file_content(owner, repo_name, path):
     """
     Hämtar och avkodar innehållet i en fil från Gitea API.
@@ -512,8 +539,11 @@ def get_file_content(repo_name, owner):
 @login_required
 def edit_file(repo_name):
     path = request.form.get("path", "")
+    newPath = request.form.get("newpath", "")
     owner = request.form.get("owner", "")
     content = request.form.get("content", "")
+    action = request.form.get("action").lower()
+    projCRS = request.form.get("projCRS").lower()
 
     if not path:
         flash("Ingen fil angiven.", "warning")
@@ -521,58 +551,274 @@ def edit_file(repo_name):
             url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
         )
 
-    try:
-        before_request()
-        gitea = OAuth2Session(client_id, token=session["oauth_token"])
+    if action == "update":
+        success = update_file(path, content, owner, repo_name)
 
-        # Hämta den befintliga filinformationen
-        response = gitea.get(
-            f"{api_base_url}/repos/{owner}/{repo_name}/contents/{path}"
+        if success:
+            flash("Filen uppdaterades framgångsrikt.", "success")
+
+        # Extrahera mappens sökväg
+        directory_path = "/".join(path.split("/")[:-1])
+
+        return redirect(
+            url_for(
+                "repo_content",
+                owner=owner,
+                repo_name=repo_name,
+                path=directory_path,
+            )
         )
-        response.raise_for_status()
-        file_data = response.json()
 
-        # Kontrollera om filen är en .crd-fil och konvertera om nödvändigt
-        if path.endswith(".crd"):
-            # Konvertera JSON-innehåll tillbaka till CRD-format
-            file_content = json_to_crd(content)
-            encoded_content = base64.b64encode(file_content).decode("utf-8")
-        else:
-            # För vanliga textfiler, behandla innehållet som vanlig text
-            encoded_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+    elif action == "create":
+        success = create_file(path, content, owner, repo_name, newPath)
 
-        # Förbered uppdateringen
-        update_data = {
-            "message": f"Edit file {path}",
-            "content": encoded_content,
-            "sha": file_data["sha"],  # Filens nuvarande SHA krävs för att uppdatera
-            "branch": "main",  # Här specificerar vi vilken branch som ska uppdateras
-        }
+        if success:
+            flash("Projektet skapades framgångsrikt.", "success")
 
-        # Skicka PUT-förfrågan för att uppdatera filen
-        update_response = gitea.put(
-            f"{api_base_url}/repos/{owner}/{repo_name}/contents/{path}",
-            json=update_data,
+        # Extrahera mappens sökväg
+        directory_path = "/".join(newPath.split("/")[:-1])
+
+        return redirect(
+            url_for(
+                "repo_content",
+                owner=owner,
+                repo_name=repo_name,
+                path=directory_path,
+            )
         )
-        update_response.raise_for_status()
 
-        flash("Filen uppdaterades framgångsrikt.", "success")
-    except HTTPError as http_err:
-        flash(f"HTTP-fel vid uppdatering av fil: {http_err}", "danger")
-    except Exception as e:
-        flash(f"Något gick fel vid uppdatering av fil: {e}", "danger")
+    elif action == "append":
+        append_file(path, content, owner, repo_name, newPath, projCRS)
 
-    # Extrahera mappens sökväg
-    directory_path = "/".join(path.split("/")[:-1])
+        flash("Projektet uppdaterades framgångsrikt.", "success")
 
+        # Extrahera mappens sökväg
+        directory_path = "/".join(newPath.split("/")[:-1])
+
+        return redirect(
+            url_for(
+                "repo_content",
+                owner=owner,
+                repo_name=repo_name,
+                path=directory_path,
+            )
+        )
+
+    flash("Något har blivit fel, Försök igen.", "danger")
     return redirect(
-        url_for(
-            "repo_content",
-            owner=owner,
-            repo_name=repo_name,
-            path=directory_path,
-        )
+        url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
     )
+
+
+def update_file(path, content, owner, repo_name) -> bool:
+    """Uppdatera en fil med nytt innehåll"""
+
+    try:
+        current_file_data = fetch_file_info(owner, repo_name, path)
+    except HTTPError as http_err:
+        flash(f"HTTP-fel vid hämtning av fil: {http_err}", "danger")
+        return redirect(
+            url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+        )
+    except Exception as e:
+        flash(f"Något gick fel vid hämtning av fil: {e}", "danger")
+        return redirect(
+            url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+        )
+
+    # Skriv om befintliga filer.
+    if _write_file(
+        path,
+        content,
+        owner,
+        repo_name,
+        current_file_data["sha"],
+    ):
+        return True
+    else:
+        return False
+
+
+def append_file(fromPath, content, owner, repo_name, toPath, projCRS):
+    """Lägg till nytt innehåll i slutet av en fil"""
+
+    try:
+        to_crdfile_data = fetch_file_info(owner, repo_name, toPath)
+        to_rw5_path = toPath.replace(".crd", ".rw5")
+        to_rw5_data = fetch_file_info(owner, repo_name, to_rw5_path)
+    except HTTPError as http_err:
+        flash(f"HTTP-fel vid hämtning av fil: {http_err}", "danger")
+        return redirect(
+            url_for("repo_content", owner=owner, repo_name=repo_name, path=fromPath)
+        )
+    except Exception as e:
+        flash(f"Något gick fel vid hämtning av fil: {e}", "danger")
+        return redirect(
+            url_for("repo_content", owner=owner, repo_name=repo_name, path=fromPath)
+        )
+
+    # Hämta gamla .rw5-filens innehåll.
+    from_rw5_path = fromPath.replace(".crd", ".rw5")
+    from_rw5_content = fetch_file_content(owner, repo_name, from_rw5_path)
+    to_rw5_content = base64.b64decode(to_rw5_data)
+    to_rw5_content = to_rw5_content.decode("utf-8", errors="ignore")
+
+    if to_crdfile_data["status_code"] != 200 or from_rw5_content == "":
+        flash(f"Filen, {toPath} kunde inte hämtas!", "danger")
+        return redirect(
+            url_for("repo_content", owner=owner, repo_name=repo_name, path=fromPath)
+        )
+
+    # Kontrollera CRS.
+    current_rw5_info = read_rw5_data(to_rw5_content)
+    if current_rw5_info["CRS"] != projCRS:
+        flash(f"Filen {toPath} finns redan och har en annan CRS-system.", "warning")
+        return redirect(
+            url_for("repo_content", owner=owner, repo_name=repo_name, path=fromPath)
+        )
+
+    # Förbered punkter för crd och rw5.
+    new_crd_json = json.loads(content)
+    rw5_points = ""
+    for point in new_crd_json["points"]:
+        rw5_points += rw5get_point(from_rw5_content, point["id"])
+
+    # Räkna hur många punkter som redan fanns.
+    current_file_content = crd_to_json(base64.b64decode(to_crdfile_data["content"]))
+    current_point_count = get_point_len(current_file_content)
+
+    # Ändra punktid på både crd och rw5
+    rw5_points = rw5changeID(rw5_points, current_point_count)
+    change_point_id(new_crd_json, current_point_count)
+
+    # Lägg på nya rw5 punkter och crd punkter till befintliga filer.
+    to_rw5_content += rw5_points
+    current_file_content["points"] += new_crd_json["points"]
+
+    # Skriv om befintliga filer.
+    _write_file(
+        toPath,
+        json.dumps(current_file_content),
+        owner,
+        repo_name,
+        to_crdfile_data["sha"],
+        "Kopierar till befintligt projekt. [no-ci]",
+    )
+    _write_file(
+        to_rw5_path,
+        to_rw5_content,
+        owner,
+        repo_name,
+        to_rw5_data["sha"],
+        "Kopierar till befintligt projekt. [no-ci]",
+    )
+
+
+def create_file(fromPath, content, owner, repo_name, toPath):
+    """Skapa en ny projektfil."""
+
+    try:
+        to_crdfile_data = fetch_file_info(owner, repo_name, toPath)
+    except HTTPError:
+        pass
+    except Exception as e:
+        flash(f"Något gick fel vid hämtning av fil: {e}", "danger")
+        return redirect(
+            url_for("repo_content", owner=owner, repo_name=repo_name, path=fromPath)
+        )
+    else:
+        if to_crdfile_data["status_code"] == 200:
+            # Filen finns redan när vi ska skapa ny, returnera felmeddelande
+            flash(f"Filen {toPath} finns redan när vi försöker skapa en ny.", "warning")
+            return redirect(
+                url_for("repo_content", owner=owner, repo_name=repo_name, path=fromPath)
+            )
+
+    # Hämta .rw5-filens innehåll.
+    from_rw5_path = fromPath.replace(".crd", ".rw5")
+    from_rw5_content = fetch_file_content(owner, repo_name, from_rw5_path)
+    from_rw5_content = from_rw5_content.decode("utf-8", errors="ignore")
+
+    # Skapa nytt RW5 innehåll.
+    to_rw5_path = toPath.replace(".crd", ".rw5")
+    new_rw5_content = get_rw5_header(from_rw5_content)
+    newJobbname = toPath.split("/")[-1].split(".")[0]
+    new_rw5_content = rw5changeJobbName(new_rw5_content, newJobbname)
+    new_crd_json = json.loads(content)
+    for point in new_crd_json["points"]:
+        new_rw5_content += rw5get_point(from_rw5_content, point["id"])
+
+    # Skriv om befintliga filer.
+    write_crd = _write_file(
+        toPath,
+        json.dumps(new_crd_json),
+        owner,
+        repo_name,
+        current_SHA=None,
+        commit_MSG="Kopierar till nytt projekt. [no-ci]",
+    )
+    write_rw5 = _write_file(
+        to_rw5_path,
+        new_rw5_content,
+        owner,
+        repo_name,
+        current_SHA=None,
+        commit_MSG="Kopierar till nytt projekt. [no-ci]",
+    )
+    if write_crd and write_rw5:
+        return True
+    else:
+        return False
+
+
+def _write_file(
+    path, content, owner, repo_name, current_SHA=None, commit_MSG=None
+) -> bool:
+    """Skriv till en fil."""
+
+    # Kontrollera om filen är en .crd-fil och konvertera om nödvändigt
+    if path.endswith(".crd"):
+        # Konvertera JSON-innehåll tillbaka till CRD-format
+        file_content = json_to_crd(content)
+        encoded_content = base64.b64encode(file_content).decode("utf-8")
+    else:
+        # För vanliga textfiler, behandla innehållet som vanlig text
+        encoded_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+
+    # Förbered uppdateringen
+    update_data = {
+        "message": f"Edit file {path}",
+        "content": encoded_content,
+        "branch": "main",  # Här specificerar vi vilken branch som ska uppdateras,
+    }
+    if current_SHA is not None:
+        # Filens nuvarande SHA krävs för att uppdatera
+        update_data["sha"] = current_SHA
+    if commit_MSG is not None:
+        update_data["message"] = commit_MSG
+
+    # Skicka PUT-förfrågan för att uppdatera filen
+    gitea = OAuth2Session(client_id, token=session["oauth_token"])
+    response = gitea.put(
+        f"{api_base_url}/repos/{owner}/{repo_name}/contents/{path}",
+        json=update_data,
+    )
+
+    try:
+        response.raise_for_status()
+
+        if response.status_code == 200:
+            return True
+        else:
+            flash("Något gick fel med att skriva till filen av filen.", "danger")
+            return False
+    except HTTPError as http_err:
+        error_detail = response.json().get("message", str(http_err))
+        flash(f"HTTP-fel med att skriva till filen: {error_detail}", "danger")
+        return False
+    except Exception as e:
+        flash(f"Något gick fel med att skriva till filen: {e}", "danger")
+        return False
 
 
 @app.route("/repo/<owner>/<repo_name>/search", methods=["GET"])
