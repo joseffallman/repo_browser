@@ -109,7 +109,7 @@ def get_rw5_header(file_content: str) -> str:
 def change_jobb_name(file_content: str, new_name: str) -> str:
     """Mönster för att hitta text efter "NM" och innan nästa komma"""
     pattern = r"(NM)([^,]+)"
-    nytt_data = re.sub(pattern, rf"\1{new_name}", file_content)
+    nytt_data = re.sub(pattern, rf"\g<1>{new_name}", file_content)
     return nytt_data
 
 
