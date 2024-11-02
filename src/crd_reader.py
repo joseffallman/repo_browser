@@ -98,3 +98,22 @@ def json_to_crd(json_data):
             crd_content.extend(struct.pack("<ddd32s", nor, eas, elv, des))
 
     return bytes(crd_content)
+
+
+def change_point_id(json_data, amount: int, old_point_id: int = None):
+    """Ändrar id på alla punkter, eller given punkt, med angiven summa."""
+    if not json_data.get("points"):
+        return
+
+    if old_point_id is None:
+        for point in json_data["points"]:
+            point["id"] += amount
+    else:
+        for point in json_data["points"]:
+            if int(point["id"]) == old_point_id:
+                point["id"] = int(point["id"]) + amount
+
+
+def get_point_len(json_data):
+    """Räknar antalet punkter i filen."""
+    return len(json_data.get("points", []))
