@@ -75,7 +75,7 @@ def change_point_code(file_content: str, point_number, new_code):
 
 def get_point(file_content: str, point_number: int) -> str:
     """Get last point with id"""
-    pattern = rf"(GPS,PN{point_number}[^\n]+(?:\n--[^\n]+)*)"
+    pattern = rf"(GPS,PN{point_number},[^\n]+(?:\n--[^\n]+)*)"
 
     matches = re.findall(pattern, file_content)
 
