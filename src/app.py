@@ -596,19 +596,60 @@ def edit_file(repo_name):
 
         files = create_file(newPath, newContent, fromRw5Content)
 
-        if len(files) > 0:
-            commitMsg = f"Copied to new. [skip ci]"
-            msg = ("Projektet skapades framgångsrikt.", "success")
-            updated_files += files
+        if len(files) == 0:
+            flash("Ingen ändringar gjorda", "warning")
+            return redirect(
+                url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+            )
+
+        commitMsg = "Copied to new. [skip ci]"
+        msg = ("Projektet skapades framgångsrikt.", "success")
+        updated_files += files
 
         # Extrahera mappens sökväg
         directory_path = "/".join(newPath.split("/")[:-1])
 
     elif action == "append":
-        # append_file(path, newContent, owner, repo_name, newPath, projCRS)
+        # Hämta .rw5-filens innehåll.
+        fromRw5Path = path.replace(".crd", ".rw5")
+        fromRw5Content = fetch_file_content(owner, repo_name, fromRw5Path)
+        fromRw5Content = fromRw5Content.decode("utf-8", errors="ignore")
 
-        commitMsg = f"Copied points to project {newPath}."
-        msg = (f"{newPath} Projektet uppdaterades framgångsrikt.", "success")
+        toRw5Path = newPath.replace(".crd", ".rw5")
+
+        try:
+            # Hämta rw5 filens nuvarande innehåll och SHA
+            response = gitea.get(
+                f"{api_base_url}/repos/{owner}/{repo_name}/contents/{newPath}"
+            )
+            response.raise_for_status()
+            toCRDfile = response.json()
+            # Hämta  crd filens nuvarande innehåll och SHA
+            response = gitea.get(
+                f"{api_base_url}/repos/{owner}/{repo_name}/contents/{toRw5Path}"
+            )
+            response.raise_for_status()
+            toRw5file = response.json()
+        except Exception as e:
+            flash(f"Något gick fel: {str(e)}", "danger")
+            return redirect(
+                url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+            )
+
+        files = append_file(newContent, fromRw5Content, projCRS, toCRDfile, toRw5file)
+
+        if len(files) == 0:
+            flash("Ingen ändringar gjorda", "warning")
+            return redirect(
+                url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+            )
+
+        updated_files += files
+        commitMsg = f"Copied points to project {newPath.split("/")[-1]}. [skip ci]"
+        msg = (
+            f"{newPath.split("/")[-1]} Projektet uppdaterades framgångsrikt.",
+            "success",
+        )
 
         # Extrahera mappens sökväg
         directory_path = "/".join(newPath.split("/")[:-1])
@@ -644,79 +685,54 @@ def edit_file(repo_name):
     )
 
 
-def append_file(fromPath, content, owner, repo_name, toPath, projCRS):
+def append_file(newContent, fromRw5Content, projCRS: str, toCRDfile, toRw5file) -> list:
     """Lägg till nytt innehåll i slutet av en fil"""
 
-    try:
-        to_crdfile_data = fetch_file_info(owner, repo_name, toPath)
-        to_rw5_path = toPath.replace(".crd", ".rw5")
-        to_rw5_data = fetch_file_info(owner, repo_name, to_rw5_path)
-    except HTTPError as http_err:
-        flash(f"HTTP-fel vid hämtning av fil: {http_err}", "danger")
-        return redirect(
-            url_for("repo_content", owner=owner, repo_name=repo_name, path=fromPath)
-        )
-    except Exception as e:
-        flash(f"Något gick fel vid hämtning av fil: {e}", "danger")
-        return redirect(
-            url_for("repo_content", owner=owner, repo_name=repo_name, path=fromPath)
-        )
-
-    # Hämta gamla .rw5-filens innehåll.
-    from_rw5_path = fromPath.replace(".crd", ".rw5")
-    from_rw5_content = fetch_file_content(owner, repo_name, from_rw5_path)
-    to_rw5_content = base64.b64decode(to_rw5_data)
-    to_rw5_content = to_rw5_content.decode("utf-8", errors="ignore")
-
-    if to_crdfile_data["status_code"] != 200 or from_rw5_content == "":
-        flash(f"Filen, {toPath} kunde inte hämtas!", "danger")
-        return redirect(
-            url_for("repo_content", owner=owner, repo_name=repo_name, path=fromPath)
-        )
+    toRw5Content = base64.b64decode(toRw5file["content"]).decode(
+        "utf-8", errors="ignore"
+    )
 
     # Kontrollera CRS.
-    current_rw5_info = read_rw5_data(to_rw5_content)
-    if current_rw5_info["CRS"] != projCRS:
-        flash(f"Filen {toPath} finns redan och har en annan CRS-system.", "warning")
-        return redirect(
-            url_for("repo_content", owner=owner, repo_name=repo_name, path=fromPath)
-        )
+    current_rw5_info = read_rw5_data(toRw5Content)
+    if current_rw5_info["CRS"].lower() != projCRS.lower():
+        flash(f"Filen {toCRDfile} har ett annat koordinatsystem.", "warning")
+        return []
 
-    # Förbered punkter för crd och rw5.
-    new_crd_json = json.loads(content)
-    rw5_points = ""
-    for point in new_crd_json["points"]:
-        rw5_points += rw5get_point(from_rw5_content, point["id"])
+    # Hämta punkter från rw5-filen.
+    newCrdJson = json.loads(newContent)
+    rw5Points = ""
+    for point in newCrdJson["points"]:
+        rw5Points += rw5get_point(fromRw5Content, point["id"])
 
     # Räkna hur många punkter som redan fanns.
-    current_file_content = crd_to_json(base64.b64decode(to_crdfile_data["content"]))
-    current_point_count = get_point_len(current_file_content)
+    toCRDContent = crd_to_json(base64.b64decode(toCRDfile["content"]))
+    toCRDContent = json.loads(toCRDContent)
+    toCRDPointCount = get_point_len(toCRDContent)
 
     # Ändra punktid på både crd och rw5
-    rw5_points = rw5changeID(rw5_points, current_point_count)
-    change_point_id(new_crd_json, current_point_count)
+    rw5Points = rw5changeID(rw5Points, toCRDPointCount)
+    change_point_id(newCrdJson, toCRDPointCount)
 
     # Lägg på nya rw5 punkter och crd punkter till befintliga filer.
-    to_rw5_content += rw5_points
-    current_file_content["points"] += new_crd_json["points"]
+    toRw5Content += rw5Points
+    toCRDContent["points"] += newCrdJson["points"]
 
-    # Skriv om befintliga filer.
-    _write_file(
-        toPath,
-        json.dumps(current_file_content),
-        owner,
-        repo_name,
-        to_crdfile_data["sha"],
-        "Kopierar till befintligt projekt. [no-ci]",
-    )
-    _write_file(
-        to_rw5_path,
-        to_rw5_content,
-        owner,
-        repo_name,
-        to_rw5_data["sha"],
-        "Kopierar till befintligt projekt. [no-ci]",
-    )
+    # Convertera CRD till sträng
+    toCRDStr = json.dumps(toCRDContent)
+
+    return [
+        {
+            "operation": "update",
+            "path": toCRDfile["path"],
+            "content": _prepare_content(toCRDfile["path"], toCRDStr),
+            "sha": toCRDfile["sha"],
+        },
+        {
+            "operation": "update",
+            "path": toRw5file["path"],
+            "content": _prepare_content(toRw5file["path"], toRw5Content),
+        },
+    ]
 
 
 def create_file(newPath, newContent, fromRw5Content) -> list:
