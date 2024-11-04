@@ -107,11 +107,11 @@ def change_point_id(json_data, amount: int, old_point_id: int = None):
 
     if old_point_id is None:
         for point in json_data["points"]:
-            point["id"] += amount
+            point["id"] = str(int(point["id"]) + amount)
     else:
         for point in json_data["points"]:
             if int(point["id"]) == old_point_id:
-                point["id"] = int(point["id"]) + amount
+                point["id"] = str(int(point["id"]) + amount)
 
 
 def get_point_len(json_data):
