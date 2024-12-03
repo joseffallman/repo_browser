@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 import time
 from functools import wraps
 
@@ -301,6 +302,11 @@ def repo_content(owner, repo_name, path):
             if item["type"] == "dir" and not item["name"].startswith(".")
         ]
         projects = [item for item in contents if item["name"].endswith(".crd")]
+        if len(projects):
+            settingsCRS = find_settings_file(
+                owner, repo_name, os.path.dirname(projects[0]["path"]), "defaultCrs"
+            )
+
         session["owner"] = owner  # Spara ägarnamnet i sessionen
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
@@ -313,6 +319,7 @@ def repo_content(owner, repo_name, path):
                 files=files,
                 dirs=dirs,
                 projects=projects,
+                settingsCRS=settingsCRS,
             )
         else:
             return render_template(
@@ -324,6 +331,7 @@ def repo_content(owner, repo_name, path):
                 files=files,
                 dirs=dirs,
                 projects=projects,
+                settingsCRS=settingsCRS,
             )
     except HTTPError as http_err:
         flash(f"HTTP-fel vid hämtning av repository-innehåll: {http_err}", "danger")
@@ -496,6 +504,46 @@ def fetch_file_content(owner, repo_name, path):
     except Exception as e:
         # Andra potentiella fel, t.ex. avkodningsfel
         raise e
+
+
+def find_settings_file(owner, repo_name, path, setting, max_levels=3):
+    """Letar efter settings.ini filen i denna mapp eller tre våningar upp."""
+    try:
+        before_request()
+        gitea = OAuth2Session(client_id, token=session["oauth_token"])
+        current_path = path
+        for _ in range(max_levels):
+            settings_path = os.path.join(current_path, "settings.ini")
+            # Kontrollera om filen existerar
+            response = gitea.get(
+                f"{api_base_url}/repos/{owner}/{repo_name}/contents/{settings_path}"
+            )
+            crs = check_crs_in_settings(response, setting)
+            if crs is not None:
+                return crs
+            # Gå en nivå upp
+            current_path = os.path.dirname(current_path)
+        return None
+
+    except HTTPError as http_err:
+        raise http_err
+    except Exception as e:
+        raise e
+
+
+def check_crs_in_settings(response, setting) -> str | None:
+    """Kontrollerar om settings.ini innehåller defaultCrs= och returnerar crs."""
+
+    if response.status_code != 200:
+        return None
+
+    # Hämta och avkoda filens innehåll
+    file_data = response.json()
+    file_content = base64.b64decode(file_data["content"]).decode(
+        "utf-8", errors="ignore"
+    )
+    match = re.search(rf"{setting}=([^\s]+)", file_content)
+    return match.group(1) if match else None
 
 
 @app.route("/repo/<owner>/<repo_name>/get_file_content", methods=["GET"])
