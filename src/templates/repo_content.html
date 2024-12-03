@@ -818,13 +818,13 @@
     // --==( KARTAN och dess funktioner )==--
 
     // Definiera SWEREF 99 TM (EPSG:3006)
-    proj4.defs("EPSG:3006", "+proj=utm +zone=33 +ellps=GRS80 +units=m +no_defs");
+    proj4.defs("EPSG:3006", "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
 
     // Definiera SWEREF 99 13 30 (EPSG:3007)
-    proj4.defs("EPSG:3007", "+proj=utm +zone=13 +ellps=GRS80 +units=m +no_defs");
+    proj4.defs("EPSG:3008", "+proj=tmerc +lat_0=0 +lon_0=13.5 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
 
     // Definiera SWEREF 99 15 00 (EPSG:3008)
-    proj4.defs("EPSG:3008", "+proj=utm +zone=15 +ellps=GRS80 +units=m +no_defs");
+    proj4.defs("EPSG:3009", "+proj=tmerc +lat_0=0 +lon_0=15 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
 
     // Registrera proj4 i OpenLayers
     ol.proj.proj4.register(proj4);
@@ -838,6 +838,7 @@
             })
         ],
         view: new ol.View({
+            projection: 'EPSG:3857',
             center: ol.proj.fromLonLat([17.6389, 59.8586]), // WGS84 center (long, lat)
             zoom: 18,
             maxZoom: 30,
@@ -898,7 +899,7 @@
                 return;
             }
             showCount++;
-            var sourceCoords = [parseFloat(point.eas.toFixed(4)), parseFloat(point.nor.toFixed(4))];
+            var sourceCoords = [point.eas, point.nor];
             sourceCoords = ol.proj.transform(sourceCoords, projCRS, 'EPSG:3857');
 
             // Skapa en markör (feature) och lägg till den i vektorkällan

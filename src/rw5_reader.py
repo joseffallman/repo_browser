@@ -38,9 +38,9 @@ def extract_crs(file_content) -> str:
     if "sweref 99 tm" in extracted.lower():
         return "EPSG:3006"
     elif "sweref 99 13 30" in extracted.lower():
-        return "EPSG:3007"
-    elif "sweref 99 15 00" in extracted.lower():
         return "EPSG:3008"
+    elif "sweref 99 15 00" in extracted.lower():
+        return "EPSG:3009"
 
     # Default
     return "EPSG:3006"
