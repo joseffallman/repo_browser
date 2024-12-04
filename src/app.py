@@ -302,6 +302,7 @@ def repo_content(owner, repo_name, path):
             if item["type"] == "dir" and not item["name"].startswith(".")
         ]
         projects = [item for item in contents if item["name"].endswith(".crd")]
+        settingsCRS = ""
         if len(projects):
             settingsCRS = find_settings_file(
                 owner, repo_name, os.path.dirname(projects[0]["path"]), "defaultCrs"
