@@ -1565,13 +1565,24 @@
 
 
     function exportProject(filePath) {
-        const originalString = filePath;
-        const newFilePath = originalString.replace(/\.crd$/, ".rw5");
 
         // Show loading spinner.
         loadingSpinner(true);
+        defaultCRS = document.getElementById("editProject").elements["defaultCRS"].value;
+        exportCRS = document.getElementById("editProject").elements["exportCRS"].value;
 
-        fetch(`{{ url_for('get_file_content', repo_name=repo_name, owner=owner) }}?path=${newFilePath}`)
+        fetch(`{{ url_for('export_projekt', repo_name=repo_name, owner=owner) }}`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    path: filePath,
+                    defaultCRS: defaultCRS,
+                    exportCRS: exportCRS
+                })
+            })
             .then(response => response.json())
             .then(data => {
                 const newFileContent = data.content.concat(" ");// Bygg upp den data som ska skickas till servern
@@ -1593,9 +1604,9 @@
         }
     });
 
-    document.addEventListener('submit', function (event) {
-        // Kontrollera att det är formuläret med id 'editProject'
-        if (event.target && event.target.id === 'editProject') {
+    document.addEventListener('click', function (event) {
+        // Kontrollera att det är formuläret med id 'openEditProject'
+        if (event.target && event.target.id === 'openEditProject') {
 
             event.preventDefault();
             const selectedOption = document.getElementById("editProject").elements["project"].value;
@@ -1605,11 +1616,9 @@
     });
 
     // Export project button
-    document.addEventListener('click', function (event) {
+    document.addEventListener('submit', function (event) {
         if (event.target && event.target.id === 'exportProject') {
-            const selectedOption = document.getElementById("editProject").elements["project"].value;
-            const project = JSON.parse(selectedOption);
-            exportProject(project.path);
+            loadingSpinner(true);
         }
     });
 

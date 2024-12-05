@@ -21,12 +21,14 @@ from requests_oauthlib import OAuth2Session
 
 try:
     from src.crd_reader import change_point_id, crd_to_json, get_point_len, json_to_crd
+    from src.crs_systems import crs_list
     from src.rw5_reader import change_jobb_name as rw5changeJobbName
     from src.rw5_reader import change_point_id as rw5changeID
     from src.rw5_reader import get_point as rw5get_point
     from src.rw5_reader import get_rw5_header, read_rw5_data
 except ImportError:
     from crd_reader import change_point_id, crd_to_json, get_point_len, json_to_crd
+    from crs_systems import crs_list
     from rw5_reader import change_jobb_name as rw5changeJobbName
     from rw5_reader import change_point_id as rw5changeID
     from rw5_reader import get_point as rw5get_point
@@ -303,10 +305,17 @@ def repo_content(owner, repo_name, path):
         ]
         projects = [item for item in contents if item["name"].endswith(".crd")]
         settingsCRS = ""
+        settingsFilePath = ""
         if len(projects):
             settingsCRS = find_settings_file(
                 owner, repo_name, os.path.dirname(projects[0]["path"]), "defaultCrs"
             )
+            projectsSettingFile = next(
+                item
+                for item in contents
+                if item["type"] == "file" and item["name"].lower() == "settings.ini"
+            )
+            settingsFilePath = projectsSettingFile["path"]
 
         session["owner"] = owner  # Spara ägarnamnet i sessionen
 
@@ -321,6 +330,8 @@ def repo_content(owner, repo_name, path):
                 dirs=dirs,
                 projects=projects,
                 settingsCRS=settingsCRS,
+                crs_list=crs_list,
+                settingsFilePath=settingsFilePath,
             )
         else:
             return render_template(
@@ -333,6 +344,8 @@ def repo_content(owner, repo_name, path):
                 dirs=dirs,
                 projects=projects,
                 settingsCRS=settingsCRS,
+                crs_list=crs_list,
+                settingsFilePath=settingsFilePath,
             )
     except HTTPError as http_err:
         flash(f"HTTP-fel vid hämtning av repository-innehåll: {http_err}", "danger")
@@ -521,7 +534,7 @@ def find_settings_file(owner, repo_name, path, setting, max_levels=3):
             )
             crs = check_crs_in_settings(response, setting)
             if crs is not None:
-                return crs
+                return crs.rstrip("\\n")
             # Gå en nivå upp
             current_path = os.path.dirname(current_path)
         return None
@@ -823,6 +836,158 @@ def _prepare_content(path: str, content: str) -> bytes:
     else:
         # För vanliga textfiler, behandla innehållet som vanlig text
         return base64.b64encode(content.encode("utf-8")).decode("utf-8")
+
+
+@app.route("/repo/<owner>/<repo_name>/export_projekt", methods=["POST"])
+@login_required
+def export_projekt(repo_name, owner):
+    """Ändra projektfil som kör export action i git repot."""
+    project = request.form.get("project", "")
+    defaultCRS = request.form.get("defaultCRS").lower()
+    exportCRS = request.form.get("exportCRS").lower()
+    settingsFilePath = request.form.get("settingsFilePath")
+
+    if not project or not defaultCRS or not exportCRS:
+        flash("Felaktiga parametrar, avbryter.", "warning")
+        return redirect(
+            url_for("repo_content", owner=owner, repo_name=repo_name, path="")
+        )
+
+    project = json.loads(project)
+    path = project["path"]
+    projName = project["name"]
+    path = path.replace(".crd", ".rw5")
+    # Extrahera mappens sökväg
+    directory_path = "/".join(path.split("/")[:-1])
+    crs_name = next(
+        (crs["name"] for crs in crs_list if crs["code"].lower() == exportCRS.lower()),
+        "",
+    )
+    commitMsg = f"Export av {projName} i {crs_name}."
+
+    gitea = OAuth2Session(client_id, token=session["oauth_token"])
+
+    settingsFileCommit = []
+    if defaultCRS.strip() != exportCRS.strip():
+        settingsFileCommit = createSettingsFile(
+            gitea, owner, repo_name, settingsFilePath, directory_path, exportCRS
+        )
+
+    rw5FileCommit = []
+    try:
+        # Hämta filens nuvarande innehåll och SHA
+        response = gitea.get(
+            f"{api_base_url}/repos/{owner}/{repo_name}/contents/{path}"
+        )
+        response.raise_for_status()
+        file_data = response.json()
+        current_content = base64.b64decode(file_data["content"]).decode(
+            "utf-8", errors="ignore"
+        )
+        if current_content[-1] == " ":
+            current_content = current_content[:-1]
+        else:
+            current_content += " "
+        rw5FileCommit = [
+            {
+                "operation": "update",
+                "path": path,
+                "content": _prepare_content(path, current_content),
+                "sha": file_data["sha"],
+            }
+        ]
+    except Exception as e:
+        flash(f"Något gick fel: {str(e)}", "danger")
+        return redirect(
+            url_for(
+                "repo_content", owner=owner, repo_name=repo_name, path=directory_path
+            )
+        )
+
+    # Skapa en commit som innehåller alla ändringar
+    commit_data = {
+        "branch": "main",
+        "message": commitMsg,
+        "files": settingsFileCommit + rw5FileCommit,
+    }
+
+    # Skapa commiten via Gitea API
+    try:
+        commit_response = gitea.post(
+            f"{api_base_url}/repos/{owner}/{repo_name}/contents", json=commit_data
+        )
+        commit_response.raise_for_status()
+    except Exception as e:
+        flash(f"Något gick fel: {str(e)}", "danger")
+        return redirect(
+            url_for(
+                "repo_content", owner=owner, repo_name=repo_name, path=directory_path
+            )
+        )
+
+    # Visa ditt meddelande och återgå till rätt sida
+
+    flash(
+        f"En ny export av {projName} med koordinatsystem {crs_name} har startats.",
+        "success",
+    )
+    return redirect(
+        url_for(
+            "repo_content",
+            owner=owner,
+            repo_name=repo_name,
+            path=directory_path,
+        )
+    )
+
+
+def createSettingsFile(
+    gitea, owner, repo_name, settingsFilePath, directory_path, exportCRS
+):
+    """Skapa en settings fil med exportCRS koden. Returnera fil info lista."""
+
+    # Hämta filens nuvarande innehåll och SHA
+    if settingsFilePath:
+        settingsFile = fetch_file_info(owner, repo_name, settingsFilePath)
+        current_content = base64.b64decode(settingsFile["content"]).decode(
+            "utf-8", errors="ignore"
+        )
+        new_content = update_default_crs(current_content, exportCRS)
+        return [
+            {
+                "operation": "update",
+                "path": settingsFilePath,
+                "content": _prepare_content(settingsFilePath, new_content),
+                "sha": settingsFile["sha"],
+            }
+        ]
+    else:
+        # Skapa en ny settings fil med defaultCRS
+        new_content = rf"[SurveyExport]\ndefaultCrs={exportCRS}\n"
+        return [
+            {
+                "operation": "create",
+                "path": os.path.join(directory_path, "settings.ini"),
+                "content": _prepare_content(settingsFilePath, new_content),
+            }
+        ]
+
+
+def update_default_crs(current_content, new_crs_value):
+    # Kolla om 'defaultCrs' finns, om den gör det, uppdatera den, annars skapa den
+    if re.search(r"\s*defaultCrs\s*=", current_content, re.IGNORECASE):
+        # Om den finns, uppdatera värdet
+        current_content = re.sub(
+            r"(\s*defaultCrs\s*=\s*)[^\n]*",
+            r"\1" + new_crs_value,
+            current_content,
+            flags=re.IGNORECASE,
+        )
+    else:
+        # Om den inte finns, lägg till den
+        current_content += f"\ndefaultCrs={new_crs_value}\n"
+
+    return current_content
 
 
 @app.route("/repo/<owner>/<repo_name>/search", methods=["GET"])

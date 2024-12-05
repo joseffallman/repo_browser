@@ -2,30 +2,24 @@
 <div class="card">
     <div class="card-body">
         <span>Denna mapp innehåller följande projekt:</span>
-        <form action="{{ url_for('repo_content', owner=owner, repo_name=repo_name) }}" method="post" id="editProject">
+        <form action="{{ url_for('export_projekt', owner=owner, repo_name=repo_name) }}" method="post" id="editProject">
             <select name="project" id="project" class="form-select form-select-lg mb-3">
                 {% for project in projects %}
                 <option value='{{project | tojson }}'>{{project.name}}</option>
                 {% endfor %}
             </select>
-            <button type="submit" class="mb-3">Redigera projekt</button>
+            <button type="button" id="openEditProject" class="mb-3">Redigera projekt</button>
             <div class="d-flex flex-column flex-sm-row align-items-center mb-3">
                 <select name="exportCRS" id="exportCRS" class="form-select form-select-lg flex-grow-1 mb-3 mb-sm-0">
-                    <option value="EPSG:3006" {% if settingsCRS=="EPSG:3006" %}selected{% endif %}>
-                        SWEREF 99 TM</option>
-                    <option value="EPSG:3008" {% if settingsCRS=="EPSG:3008" %}selected{% endif %}>
-                        SWEREF 99 13 30</option>
-                    <option value="EPSG:3009" {% if settingsCRS=="EPSG:3009" %}selected{% endif %}>
-                        SWEREF 99 15 00</option>
-                    <option value="EPSG:5845" {% if settingsCRS=="EPSG:5845" %}selected{% endif %}>
-                        SWEREF 99 TM + RH2000 height</option>
-                    <option value="EPSG:5847" {% if settingsCRS=="EPSG:5847" %}selected{% endif %}>
-                        SWEREF 99 13 30 + RH2000 height</option>
-                    <option value="EPSG:5848" {% if settingsCRS=="EPSG:5848" %}selected{% endif %}>
-                        SWEREF 99 15 00 + RH2000 height</option>
+                    {% for crs in crs_list %}
+                    <option value="{{ crs.code }}" {% if settingsCRS.lower()==crs.code.lower() %}selected{% endif %}>
+                        {{ crs.name }}
+                    </option>
+                    {% endfor %}
                 </select>
                 <input type="hidden" name="defaultCRS" id="defaultCRS" value="{{settingsCRS}}">
-                <button type="button" id="exportProject" class="ms-2">Exportera</button>
+                <input type="hidden" name="settingsFilePath" value="{{settingsFilePath}}">
+                <button type="submit" id="exportProject" class="ms-2">Exportera</button>
             </div>
         </form>
     </div>
