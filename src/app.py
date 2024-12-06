@@ -311,10 +311,12 @@ def repo_content(owner, repo_name, path):
                 owner, repo_name, os.path.dirname(projects[0]["path"]), "defaultCrs"
             )
             projectsSettingFile = next(
-                (item
-                for item in contents
-                if item["type"] == "file" and item["name"].lower() == "settings.ini"),
-                None
+                (
+                    item
+                    for item in contents
+                    if item["type"] == "file" and item["name"].lower() == "settings.ini"
+                ),
+                None,
             )
             if projectsSettingFile:
                 settingsFilePath = projectsSettingFile["path"]
@@ -539,7 +541,7 @@ def find_settings_file(owner, repo_name, path, setting, max_levels=3):
                 return crs.rstrip("\\n")
             # Gå en nivå upp
             current_path = os.path.dirname(current_path)
-        return None
+        return ""
 
     except HTTPError as http_err:
         raise http_err
