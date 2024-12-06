@@ -311,11 +311,13 @@ def repo_content(owner, repo_name, path):
                 owner, repo_name, os.path.dirname(projects[0]["path"]), "defaultCrs"
             )
             projectsSettingFile = next(
-                item
+                (item
                 for item in contents
-                if item["type"] == "file" and item["name"].lower() == "settings.ini"
+                if item["type"] == "file" and item["name"].lower() == "settings.ini"),
+                None
             )
-            settingsFilePath = projectsSettingFile["path"]
+            if projectsSettingFile:
+                settingsFilePath = projectsSettingFile["path"]
 
         session["owner"] = owner  # Spara ägarnamnet i sessionen
 
