@@ -872,7 +872,7 @@ def export_projekt(repo_name, owner):
     gitea = OAuth2Session(client_id, token=session["oauth_token"])
 
     settingsFileCommit = []
-    if len(defaultCRS.strip()) AND defaultCRS.strip() != exportCRS.strip():
+    if len(defaultCRS.strip()) and defaultCRS.strip() != exportCRS.strip():
         settingsFileCommit = createSettingsFile(
             gitea, owner, repo_name, settingsFilePath, directory_path, exportCRS
         )
