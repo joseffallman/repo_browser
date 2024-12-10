@@ -851,7 +851,7 @@ def export_projekt(repo_name, owner):
     exportCRS = request.form.get("exportCRS").lower()
     settingsFilePath = request.form.get("settingsFilePath")
 
-    if not project or not defaultCRS or not exportCRS:
+    if not project or not exportCRS:
         flash("Felaktiga parametrar, avbryter.", "warning")
         return redirect(
             url_for("repo_content", owner=owner, repo_name=repo_name, path="")
@@ -872,7 +872,7 @@ def export_projekt(repo_name, owner):
     gitea = OAuth2Session(client_id, token=session["oauth_token"])
 
     settingsFileCommit = []
-    if defaultCRS.strip() != exportCRS.strip():
+    if len(defaultCRS.strip()) AND defaultCRS.strip() != exportCRS.strip():
         settingsFileCommit = createSettingsFile(
             gitea, owner, repo_name, settingsFilePath, directory_path, exportCRS
         )
