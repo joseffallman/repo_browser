@@ -1,3 +1,5 @@
 pytest
 pytest-flask
 requests_mock
+debugpy
+flower

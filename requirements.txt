@@ -2,3 +2,5 @@ flask
 requests_oauthlib
 python-dotenv
 gunicorn
+celery
+redis
