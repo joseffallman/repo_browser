@@ -5,7 +5,6 @@ import re
 import time
 from functools import wraps
 
-from dotenv import load_dotenv
 from flask import (
     Flask,
     flash,
@@ -19,52 +18,26 @@ from flask import (
 from requests.exceptions import HTTPError
 from requests_oauthlib import OAuth2Session
 
-try:
-    from src.crd_reader import change_point_id, crd_to_json, get_point_len, json_to_crd
-    from src.crs_systems import crs_list
-    from src.rw5_reader import change_jobb_name as rw5changeJobbName
-    from src.rw5_reader import change_point_id as rw5changeID
-    from src.rw5_reader import get_point as rw5get_point
-    from src.rw5_reader import get_rw5_header, read_rw5_data
-except ImportError:
-    from crd_reader import change_point_id, crd_to_json, get_point_len, json_to_crd
-    from crs_systems import crs_list
-    from rw5_reader import change_jobb_name as rw5changeJobbName
-    from rw5_reader import change_point_id as rw5changeID
-    from rw5_reader import get_point as rw5get_point
-    from rw5_reader import get_rw5_header, read_rw5_data
-
-load_dotenv()
+from __init__ import (
+    api_base_url,
+    app_url,
+    authorization_base_url,
+    build_date,
+    build_version,
+    client_id,
+    client_secret,
+    token_url,
+)
+from crd_reader import change_point_id, crd_to_json, get_point_len, json_to_crd
+from crs_systems import crs_list
+from rw5_reader import change_jobb_name as rw5changeJobbName
+from rw5_reader import change_point_id as rw5changeID
+from rw5_reader import get_point as rw5get_point
+from rw5_reader import get_rw5_header, read_rw5_data
+from tasks_routes import tasks_routes
 
 app = Flask(__name__)
 app.secret_key = os.getenv("secret_key")
-
-# Gitea-konfiguration
-client_id = os.getenv("client_id")
-client_secret = os.getenv("client_secret")
-gitea_url = os.getenv("gitea_url")
-app_url = os.getenv("app_url")
-
-# Build enviroments
-build_date = os.getenv("BUILD_DATE", time.strftime("%Y-%m-%d"))
-build_version = os.getenv("BUILD_VERSION", "Develop")
-
-if len(build_version) > 15 and ":" in build_version:
-    branch, repo = build_version.split(":")
-    build_version = branch + ":" + repo[0:7]
-
-if not app_url:
-    app_url = "http://localhost:5000/"
-
-if not app_url.endswith("/"):
-    app_url = app_url + "/"
-
-if not gitea_url.endswith("/"):
-    gitea_url = gitea_url + "/"
-
-authorization_base_url = f"{gitea_url}login/oauth/authorize"
-token_url = f"{gitea_url}login/oauth/access_token"
-api_base_url = f"{gitea_url}api/v1"
 
 
 @app.context_processor
@@ -73,6 +46,10 @@ def inject_global_variables():
         "build_date": build_date,
         "build_version": build_version,
     }
+
+
+# Importera och registrera blueprint
+app.register_blueprint(tasks_routes)
 
 
 @app.route("/")
@@ -101,7 +78,8 @@ def login():
             redirect_uri=f"{app_url}callback",
             scope="repository",
         )
-        authorization_url, state = gitea.authorization_url(authorization_base_url)
+        authorization_url, state = gitea.authorization_url(
+            authorization_base_url)
 
         # Spara state i sessionen så vi kan verifiera efter callback
         session["oauth_state"] = state
@@ -308,7 +286,8 @@ def repo_content(owner, repo_name, path):
         settingsFilePath = ""
         if len(projects):
             settingsCRS = find_settings_file(
-                owner, repo_name, os.path.dirname(projects[0]["path"]), "defaultCrs"
+                owner, repo_name, os.path.dirname(
+                    projects[0]["path"]), "defaultCrs"
             )
             projectsSettingFile = next(
                 (
@@ -352,10 +331,12 @@ def repo_content(owner, repo_name, path):
                 settingsFilePath=settingsFilePath,
             )
     except HTTPError as http_err:
-        flash(f"HTTP-fel vid hämtning av repository-innehåll: {http_err}", "danger")
+        flash(
+            f"HTTP-fel vid hämtning av repository-innehåll: {http_err}", "danger")
         return redirect(url_for("repos"))
     except Exception as e:
-        flash(f"Något gick fel vid hämtning av repository-innehåll: {e}", "danger")
+        flash(
+            f"Något gick fel vid hämtning av repository-innehåll: {e}", "danger")
         return redirect(url_for("repos"))
 
 
@@ -369,7 +350,8 @@ def create_folder(repo_name):
     if not folder_name:
         flash("Mappnamn får inte vara tomt.", "warning")
         return redirect(
-            url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+            url_for("repo_content", owner=owner,
+                    repo_name=repo_name, path=path)
         )
 
     full_path = f"{path}/{folder_name}".lstrip("/")
@@ -398,7 +380,8 @@ def create_folder(repo_name):
         flash(f"Något gick fel vid skapande av mapp: {e}", "danger")
 
     return redirect(
-        url_for("repo_content", owner=owner, repo_name=repo_name, path=full_path)
+        url_for("repo_content", owner=owner,
+                repo_name=repo_name, path=full_path)
     )
 
 
@@ -413,7 +396,8 @@ def upload_file(repo_name):
     if not uploaded_file:
         flash("Ingen fil vald.", "warning")
         return redirect(
-            url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+            url_for("repo_content", owner=owner,
+                    repo_name=repo_name, path=path)
         )
 
     file_content = uploaded_file.read()  # Läser filens innehåll
@@ -435,7 +419,8 @@ def upload_file(repo_name):
                 "En fil med detta namn finns redan på den angivna platsen.", "warning"
             )
             return redirect(
-                url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+                url_for("repo_content", owner=owner,
+                        repo_name=repo_name, path=path)
             )
 
         encoded_content = base64.b64encode(file_content).decode("utf-8")
@@ -587,7 +572,8 @@ def get_file_content(repo_name, owner):
             rw5_content = fetch_file_content(owner, repo_name, rw5_path)
 
             # Bearbeta innehållet i .rw5-filen
-            rw5_result = read_rw5_data(rw5_content.decode("utf-8", errors="ignore"))
+            rw5_result = read_rw5_data(
+                rw5_content.decode("utf-8", errors="ignore"))
 
             # Returnera båda resultaten
             return jsonify({"content": file_content_json, "info": rw5_result})
@@ -614,7 +600,8 @@ def edit_file(repo_name):
     if not path or not action:
         flash("Felaktiga parametrar, avbryter.", "warning")
         return redirect(
-            url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+            url_for("repo_content", owner=owner,
+                    repo_name=repo_name, path=path)
         )
 
     gitea = OAuth2Session(client_id, token=session["oauth_token"])
@@ -627,14 +614,15 @@ def edit_file(repo_name):
         )
         response.raise_for_status()
         file_data = response.json()
-        current_content = base64.b64decode(file_data["content"]).decode(
-            "utf-8", errors="ignore"
-        )
+        # current_content = base64.b64decode(file_data["content"]).decode(
+        #     "utf-8", errors="ignore"
+        # )
         sha = file_data["sha"]
     except Exception as e:
         flash(f"Något gick fel: {str(e)}", "danger")
         return redirect(
-            url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+            url_for("repo_content", owner=owner,
+                    repo_name=repo_name, path=path)
         )
 
     if action == "update":
@@ -665,7 +653,8 @@ def edit_file(repo_name):
         if len(files) == 0:
             flash("Ingen ändringar gjorda", "warning")
             return redirect(
-                url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+                url_for("repo_content", owner=owner,
+                        repo_name=repo_name, path=path)
             )
 
         commitMsg = "Copied to new. [skip ci]"
@@ -699,15 +688,18 @@ def edit_file(repo_name):
         except Exception as e:
             flash(f"Något gick fel: {str(e)}", "danger")
             return redirect(
-                url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+                url_for("repo_content", owner=owner,
+                        repo_name=repo_name, path=path)
             )
 
-        files = append_file(newContent, fromRw5Content, projCRS, toCRDfile, toRw5file)
+        files = append_file(newContent, fromRw5Content,
+                            projCRS, toCRDfile, toRw5file)
 
         if len(files) == 0:
             flash("Ingen ändringar gjorda", "warning")
             return redirect(
-                url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+                url_for("repo_content", owner=owner,
+                        repo_name=repo_name, path=path)
             )
 
         updated_files += files
@@ -736,7 +728,8 @@ def edit_file(repo_name):
     except Exception as e:
         flash(f"Något gick fel: {str(e)}", "danger")
         return redirect(
-            url_for("repo_content", owner=owner, repo_name=repo_name, path=path)
+            url_for("repo_content", owner=owner,
+                    repo_name=repo_name, path=path)
         )
 
     # Visa ditt meddelande och återgå till rätt sida
@@ -864,7 +857,8 @@ def export_projekt(repo_name, owner):
     # Extrahera mappens sökväg
     directory_path = os.path.dirname(path)
     crs_name = next(
-        (crs["name"] for crs in crs_list if crs["code"].lower() == exportCRS.lower()),
+        (crs["name"]
+         for crs in crs_list if crs["code"].lower() == exportCRS.lower()),
         "",
     )
     commitMsg = f"Export av {projName} i {crs_name}."

@@ -5,21 +5,51 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Flask",
+            "name": "Flask",
             "type": "debugpy",
             "request": "launch",
             "module": "flask",
             "env": {
-                "FLASK_APP": "src/app.py",
+                "FLASK_APP": "app.py",
                 "FLASK_DEBUG": "1"
             },
+            "cwd": "${workspaceFolder}/src",
             "args": [
                 "run",
                 "--no-debugger",
                 "--no-reload"
             ],
             "jinja": true,
-            "autoStartBrowser": false
+            "autoStartBrowser": false,
+            // "preLaunchTask": "start-redis-container",
+            // "postDebugTask": "stop-redis-container"
+        },
+        {
+            "name": "Celery",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "celery",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/src",
+            "args": [
+                "--app",
+                "tasks.celery",
+                "worker",
+                "--loglevel",
+                "DEBUG",
+                "--pool",
+                "solo",
+            ]
+        },
+    ],
+    "compounds": [
+        {
+            "name": "Flask, Celery",
+            "configurations": [
+                "Flask",
+                "Celery"
+            ],
+            "stopAll": true
         }
     ]
 }

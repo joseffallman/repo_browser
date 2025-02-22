@@ -1,16 +1,26 @@
-version: "3.8"
-
 services:
   dev:
     image: mcr.microsoft.com/devcontainers/python:1-3.12-bookworm
     command: sleep infinity
     ports:
-      - "5678:5678" # Debugging för Celery
       - "5555:5555" # Flower
     volumes:
-      - ..:/workspace
+      - ../:/workspace:cached
     depends_on:
       - redis
+
+  # worker:
+  #   build:
+  #     context: ../
+  #     dockerfile: .devcontainer/Dockerfile_celery
+  #   volumes:
+  #    - ..:/workspace
+  #   environment:
+  #     - FLASK_ENV=development
+  #   ports:
+  #    - "5678:5678" # Debugging för Celery
+  #   depends_on:
+  #     - dev
 
   redis:
     image: redis:latest

@@ -8,6 +8,30 @@
             "type": "shell",
             "command": "celery -A src.tasks flower --port=5555 --detach",
             "problemMatcher": []
+        },
+        {
+            "label": "start-redis-container",
+            "type": "shell",
+            "command": "docker",
+            "args": [
+                "run",
+                "-d",
+                "--name",
+                "redis",
+                "-p",
+                "6379:6379",
+                "redis:latest"
+            ],
+        },
+        {
+            "label": "stop-redis-container",
+            "type": "shell",
+            "command": "docker",
+            "args": [
+                "rm",
+                "-f",
+                "redis"
+            ],
         }
     ]
 }
