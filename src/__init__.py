@@ -8,7 +8,7 @@ load_dotenv()
 # Gitea-konfiguration
 client_id = os.getenv("client_id")
 client_secret = os.getenv("client_secret")
-gitea_url = os.getenv("gitea_url")
+gitea_url = os.getenv("gitea_url", "http://localhost:8000/")
 app_url = os.getenv("app_url", "http://localhost:5000/")
 
 # Celery-konfiguration
