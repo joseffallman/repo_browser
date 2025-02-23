@@ -38,6 +38,7 @@ from tasks_routes import tasks_routes
 
 app = Flask(__name__)
 app.secret_key = os.getenv("secret_key")
+app.register_blueprint(tasks_routes, url_prefix="/api")
 
 
 @app.context_processor
@@ -46,10 +47,6 @@ def inject_global_variables():
         "build_date": build_date,
         "build_version": build_version,
     }
-
-
-# Importera och registrera blueprint
-app.register_blueprint(tasks_routes)
 
 
 @app.route("/")

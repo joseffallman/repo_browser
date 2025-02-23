@@ -4,7 +4,7 @@ from tasks import (
     add,
 )
 
-tasks_routes = Blueprint("routes", __name__, url_prefix="/api")
+tasks_routes = Blueprint("tasks", __name__)
 
 
 @tasks_routes.route("/start-task", methods=["GET"])

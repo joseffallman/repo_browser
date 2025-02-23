@@ -7,7 +7,8 @@ from __init__ import api_base_url, celery_broker_url, celery_result_backend, cli
 celery = Celery(
     "tasks",
     broker=celery_broker_url,
-    backend=celery_result_backend
+    backend=celery_result_backend,
+    broker_connection_retry_on_startup=True,
 )
 
 
