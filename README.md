@@ -17,8 +17,7 @@ CELERY_RESULT_BACKEND=
 
 
 # Example of docker compose file for running the app
-
-version: "3.8"
+```
 services:
   repo_browser:
     # image: ghcr.io/joseffallman/repo_browser:main
@@ -34,8 +33,6 @@ services:
     restart: always
     networks:
       - nginx_nginx
-    volumes:
-      - shared_volume:/app
     depends_on:
       - redis
 
@@ -46,21 +43,16 @@ services:
       - jocoding_cloud
     networks:
       - nginx_nginx
-    volumes:
-      - shared_volume:/app
     working_dir: /app
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     command: >
-      celery -A tasks.celery worker --loglevel=DEBUG --pool=solo
+      celery -A tasks.celery worker
 
   redis:
     image: redis:latest
-    ports:
-      - "6379:6379"
     networks:
       - nginx_nginx
 
-volumes:
-  shared_volume:
+```
