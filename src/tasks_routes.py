@@ -17,7 +17,7 @@ def start_task():
 
     # Generera en länk till taskens status
     status_url = url_for(
-        "routes.get_task_status",
+        "tasks.get_task_status",
         task_id=task.id,
         _external=True
     )
