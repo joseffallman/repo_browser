@@ -1,6 +1,9 @@
-A flask app to browse, add and edit files in a gitea repository.
+# A flask app to browse, add and edit files in a gitea repository.
+This is a proof of concept of a web app to browse and edit files (survey files from carlson survpc) in a gitea repository.
 
-Add this secrets in a .env file or insert them in another way into the app:
+## .env
+Add this secrets and enviroment variables in a .env file or insert them in another way into the app:
+```
 // Flask secret key
 secret_key=
 
@@ -14,9 +17,10 @@ gitea_instance=
 // Celery broker and backend, e.g. redis://redis:6379/0
 CELERY_BROKER_URL=
 CELERY_RESULT_BACKEND=
+```
 
-
-# Example of docker compose file for running the app
+## docker-compose.yml
+Example of docker compose file for running the app
 ```
 services:
   repo_browser:
@@ -56,3 +60,5 @@ services:
       - nginx_nginx
 
 ```
+
+When everything is up and running, you should be able to access the app at `http://your.domain.for.this.app:8000` and if you have a nginx proxy in front of it, you can access it at after updating the nginx config.
