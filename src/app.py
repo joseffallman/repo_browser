@@ -546,6 +546,34 @@ def check_crs_in_settings(response, setting) -> str | None:
     return match.group(1) if match else None
 
 
+@app.route("/repo/<owner>/<repo_name>/check_file_exists", methods=["GET"])
+@login_required
+def check_file_exists(owner, repo_name):
+    path = request.args.get("path", "")
+    if not path:
+        return jsonify({"error": "Ingen fil angiven."}), 400
+
+    try:
+        before_request()
+        gitea = OAuth2Session(client_id, token=session["oauth_token"])
+
+        # Kontrollera om filen redan finns
+        response = gitea.get(
+            f"{api_base_url}/repos/{owner}/{repo_name}/contents/{path}"
+        )
+
+        if response.status_code == 200:
+            return jsonify({"exists": True})
+        else:
+            return jsonify({"exists": False})
+    except HTTPError as http_err:
+        if http_err.response.status_code == 404:
+            return jsonify({"exists": False})
+        return jsonify({"error": f"HTTP-fel: {http_err}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Fel: {e}"}), 500
+
+
 @app.route("/repo/<owner>/<repo_name>/get_file_content", methods=["GET"])
 @login_required
 def get_file_content(repo_name, owner):

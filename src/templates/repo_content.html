@@ -613,6 +613,7 @@
             </div>
             <div class="modal-body">
                 Innan du sparar så måste du försäkra att Inmätningsutrustningen är avstängd.
+                <p id="saveAsModalMessage" class="mt-3"></p> <!-- Message element -->
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-primary" id="confirmSaveBtn">Jag har stängt av
@@ -718,6 +719,19 @@
         var searchModal = new bootstrap.Modal(document.getElementById('searchModal'));
         searchModal.show();
 
+    }
+</script>
+<script>
+    function checkFileExists(filePath, callback) {
+        fetch(`{{ url_for('check_file_exists', repo_name=repo_name, owner=owner) }}?path=${filePath}`)
+            .then(response => response.json())
+            .then(data => {
+                callback(data.exists);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                callback(false);
+            });
     }
 </script>
 <script>
@@ -1379,6 +1393,24 @@
             var warningModal = document.getElementById('warningModal');
             var modal = new bootstrap.Modal(warningModal);
             modal.show();
+
+            if (editFilePageWhenSaving === 'saveAsPointCode') {
+                // Check if the file exists
+                const saveAsInput = document.getElementById('saveAsInput');
+                const newFilePath = saveAsInput.value + ".crd";
+                const actionSelect = document.getElementById('actionSelect');
+
+                checkFileExists(newFilePath, function (exists) {
+                    const saveAsModalMessage = document.getElementById('saveAsModalMessage');
+                    if (exists) {
+                        actionSelect.value = 'append';
+                        document.getElementById('saveAsModalMessage').textContent = "The file already exists. The points will be appended to the existing file.";
+                    } else {
+                        actionSelect.value = 'create';
+                        document.getElementById('saveAsModalMessage').textContent = "The file does not exist. A new file will be created.";
+                    }
+                });
+            }
         });
     });
 
@@ -1389,40 +1421,35 @@
 
     // document.getElementById('saveBtn').addEventListener('click', () => {
     function editFileSave() {
-        // Bygg upp den data som ska skickas till servern
         const form = document.getElementById('editFileForm');
         const actionSelect = document.getElementById('actionSelect');
         const projCRSInput = document.getElementById('projCRS');
-        // Uppdatera crs i formuläret.
+        const saveAsInput = document.getElementById('saveAsInput');
+        const newFilePath = saveAsInput.value + ".crd";
+
+        // Update CRS in the form
         projCRSInput.value = projCRS;
 
-        // Kontrollera vilken sida som lagrades när spara knappen trycktes
         if (editFilePageWhenSaving === 'editPointCode') {
             actionSelect.value = 'update';
             document.getElementById('editFileContent').value = JSON.stringify(currentPointData);
         } else if (editFilePageWhenSaving === 'saveAsPointCode') {
-            actionSelect.value = 'create';
 
-            // Spara valda punkter till ny fil.
-            document.getElementById('newFilePath').value = document.getElementById('saveAsInput').value + ".crd";
-            // Skapa en kopia av currentPointData
+            // We can never update a file if in save as mode. Switch to create.
+            if (actionSelect.value === 'update') {
+                actionSelect.value = 'create';
+            }
+
+            // Save selected points to new file
+            document.getElementById('newFilePath').value = newFilePath;
             const updatedPointData = {
                 ...currentPointData,
                 points: currentPointData.points.filter(point => selectedItems.has(point.id))
             };
-
-            // Uppdatera editFileContent med den filtrerade kopian
             document.getElementById('editFileContent').value = JSON.stringify(updatedPointData);
-
-            console.log(updatedPointData);
-            console.log(document.getElementById('newFilePath').value);
-            console.log(projCRSInput.value);
-            console.log(actionSelect.value);
         }
 
         loadingSpinner(true);
-
-        // Skicka formuläret till servern som returnerar en ny sida.
         form.submit();
     }
 
