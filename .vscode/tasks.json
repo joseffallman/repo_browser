@@ -6,8 +6,11 @@
         {
             "label": "Start Flower on port 5555",
             "type": "shell",
-            "command": "celery -A src.tasks flower --port=5555 --detach",
-            "problemMatcher": []
+            "command": "celery -A tasks flower --port=5555 --detach",
+            "problemMatcher": [],
+            "options": {
+                "cwd": "${workspaceFolder}/src"
+            }
         },
         {
             "label": "start-redis-container",
