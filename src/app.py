@@ -18,13 +18,7 @@ from flask import (
 from requests.exceptions import HTTPError
 from requests_oauthlib import OAuth2Session
 
-from crd_reader import crd_to_json
-from crs_systems import crs_list
-from rw5_reader import read_rw5_data
-from tasks import edit_file_task
-from tasks_routes import tasks_routes
-
-from . import (
+from __init__ import (
     api_base_url,
     app_url,
     authorization_base_url,
@@ -34,10 +28,15 @@ from . import (
     client_secret,
     token_url,
 )
-from .gitea import (
+from crd_reader import crd_to_json
+from crs_systems import crs_list
+from gitea import (
     _prepare_content,
     fetch_file_content,
 )
+from rw5_reader import read_rw5_data
+from tasks import edit_file_task
+from tasks_routes import tasks_routes
 
 app = Flask(__name__)
 app.secret_key = os.getenv("secret_key")
