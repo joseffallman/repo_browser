@@ -121,8 +121,8 @@
             {% if messages %}
             <div class="col-md-8 col-12 p-0">
                 {% for category, message in messages %}
-                <div id="alert-{{ loop.index }}" class="alert alert-{{ category }} alert-dismissible fade show"
-                    role="alert">
+                <div id="alert-{{ loop.index }}"
+                    class="alert alert-{{ category }} alert-dismissible fade show auto-close" role="alert">
                     {{ message }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     <div class="alert-indicator"></div>
@@ -131,6 +131,14 @@
             </div>
             {% endif %}
             {% endwith %}
+            <!-- Task status message -->
+            <div id="task-status" class="col-md-8 col-12 p-0" style="display: none;">
+                <div id="task-status-alert" class="alert alert-info alert-dismissible fade show" role="alert">
+                    <span id="task-status-message">Worker is in progress...</span>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    <div class="alert-indicator"></div>
+                </div>
+            </div>
             <div class="col-md-8 col-12 p-0">
                 <div class="custom-box">
                     <div class="custom-header text-center">
@@ -179,7 +187,7 @@
             const fadeDuration = 500;
             const indicatorThickness = 4;
 
-            const alerts = document.querySelectorAll('.alert');
+            const alerts = document.querySelectorAll('.auto-close');
 
             alerts.forEach(alert => {
                 const indicator = alert.querySelector('.alert-indicator');

@@ -18,7 +18,13 @@ from flask import (
 from requests.exceptions import HTTPError
 from requests_oauthlib import OAuth2Session
 
-from __init__ import (
+from crd_reader import crd_to_json
+from crs_systems import crs_list
+from rw5_reader import read_rw5_data
+from tasks import edit_file_task
+from tasks_routes import tasks_routes
+
+from . import (
     api_base_url,
     app_url,
     authorization_base_url,
@@ -28,13 +34,10 @@ from __init__ import (
     client_secret,
     token_url,
 )
-from crd_reader import change_point_id, crd_to_json, get_point_len, json_to_crd
-from crs_systems import crs_list
-from rw5_reader import change_jobb_name as rw5changeJobbName
-from rw5_reader import change_point_id as rw5changeID
-from rw5_reader import get_point as rw5get_point
-from rw5_reader import get_rw5_header, read_rw5_data
-from tasks_routes import tasks_routes
+from .gitea import (
+    _prepare_content,
+    fetch_file_content,
+)
 
 app = Flask(__name__)
 app.secret_key = os.getenv("secret_key")
@@ -470,42 +473,6 @@ def fetch_file_info(owner, repo_name, path):
         raise e
 
 
-def fetch_file_content(owner, repo_name, path):
-    """
-    Hämtar och avkodar innehållet i en fil från Gitea API.
-
-    :param owner: Ägaren av repot (repository)
-    :param repo_name: Namnet på repot
-    :param path: Sökvägen till filen i repot
-    :return: Avkodat innehåll av filen
-    :raises HTTPError: Om det uppstår fel vid API-anropet
-    """
-    try:
-        # Förbered förfrågan med OAuth2-sessionen
-        before_request()  # Om det behövs för att uppdatera tokens
-        gitea = OAuth2Session(client_id, token=session["oauth_token"])
-
-        # Gör GET-förfrågan till Gitea API för att hämta filen
-        response = gitea.get(
-            f"{api_base_url}/repos/{owner}/{repo_name}/contents/{path}"
-        )
-        response.raise_for_status()  # Om svaret indikerar ett HTTP-fel kastas ett undantag
-
-        # Hämta och avkoda filens innehåll
-        file_data = response.json()
-        file_content = base64.b64decode(file_data["content"])
-        return file_content
-
-    except HTTPError as http_err:
-        # Om det uppstår ett HTTP-fel, kan vi logga eller hantera det
-        # Returnera en tom sträng även om filen inte finns.
-        return b""
-        raise http_err
-    except Exception as e:
-        # Andra potentiella fel, t.ex. avkodningsfel
-        raise e
-
-
 def find_settings_file(owner, repo_name, path, setting, max_levels=3):
     """Letar efter settings.ini filen i denna mapp eller tre våningar upp."""
     try:
@@ -584,8 +551,10 @@ def get_file_content(repo_name, owner):
         return jsonify({"error": "Ingen fil angiven."}), 400
 
     try:
+        before_request()
+        gitea = OAuth2Session(client_id, token=session["oauth_token"])
         # Hämta innehållet för den begärda filen
-        file_content = fetch_file_content(owner, repo_name, path)
+        file_content = fetch_file_content(gitea, owner, repo_name, path)
 
         # Kontrollera om filen är en CRD-fil
         if editProject or path.endswith(".crd"):
@@ -594,7 +563,7 @@ def get_file_content(repo_name, owner):
 
             # Hämta .rw5-filens innehåll
             rw5_path = path.replace(".crd", ".rw5")
-            rw5_content = fetch_file_content(owner, repo_name, rw5_path)
+            rw5_content = fetch_file_content(gitea, owner, repo_name, rw5_path)
 
             # Bearbeta innehållet i .rw5-filen
             rw5_result = read_rw5_data(
@@ -619,7 +588,7 @@ def edit_file(repo_name):
     newPath = request.form.get("newpath", "")
     owner = request.form.get("owner", "")
     newContent = request.form.get("content", "")
-    action = request.form.get("action").lower()
+    action = request.form.get("actionSelect").lower()
     projCRS = request.form.get("projCRS").lower()
 
     if not path or not action:
@@ -629,235 +598,20 @@ def edit_file(repo_name):
                     repo_name=repo_name, path=path)
         )
 
-    gitea = OAuth2Session(client_id, token=session["oauth_token"])
-    updated_files = []
-
-    try:
-        # Hämta filens nuvarande innehåll och SHA
-        response = gitea.get(
-            f"{api_base_url}/repos/{owner}/{repo_name}/contents/{path}"
-        )
-        response.raise_for_status()
-        file_data = response.json()
-        # current_content = base64.b64decode(file_data["content"]).decode(
-        #     "utf-8", errors="ignore"
-        # )
-        sha = file_data["sha"]
-    except Exception as e:
-        flash(f"Något gick fel: {str(e)}", "danger")
-        return redirect(
-            url_for("repo_content", owner=owner,
-                    repo_name=repo_name, path=path)
-        )
-
-    if action == "update":
-        updated_content = _prepare_content(path, newContent)
-        updated_files.append(
-            {
-                "operation": "update",
-                "path": path,
-                "content": updated_content,
-                "sha": sha,
-            }
-        )
-
-        commitMsg = f"Uppdaterade fil: {path}"
-        msg = ("Filen uppdaterades framgångsrikt.", "success")
-
-        # Extrahera mappens sökväg
-        directory_path = "/".join(path.split("/")[:-1])
-
-    elif action == "create":
-        # Hämta .rw5-filens innehåll.
-        fromRw5Path = path.replace(".crd", ".rw5")
-        fromRw5Content = fetch_file_content(owner, repo_name, fromRw5Path)
-        fromRw5Content = fromRw5Content.decode("utf-8", errors="ignore")
-
-        files = create_file(newPath, newContent, fromRw5Content)
-
-        if len(files) == 0:
-            flash("Ingen ändringar gjorda", "warning")
-            return redirect(
-                url_for("repo_content", owner=owner,
-                        repo_name=repo_name, path=path)
-            )
-
-        commitMsg = "Copied to new. [skip ci]"
-        msg = ("Projektet skapades framgångsrikt.", "success")
-        updated_files += files
-
-        # Extrahera mappens sökväg
-        directory_path = "/".join(newPath.split("/")[:-1])
-
-    elif action == "append":
-        # Hämta .rw5-filens innehåll.
-        fromRw5Path = path.replace(".crd", ".rw5")
-        fromRw5Content = fetch_file_content(owner, repo_name, fromRw5Path)
-        fromRw5Content = fromRw5Content.decode("utf-8", errors="ignore")
-
-        toRw5Path = newPath.replace(".crd", ".rw5")
-
-        try:
-            # Hämta rw5 filens nuvarande innehåll och SHA
-            response = gitea.get(
-                f"{api_base_url}/repos/{owner}/{repo_name}/contents/{newPath}"
-            )
-            response.raise_for_status()
-            toCRDfile = response.json()
-            # Hämta  crd filens nuvarande innehåll och SHA
-            response = gitea.get(
-                f"{api_base_url}/repos/{owner}/{repo_name}/contents/{toRw5Path}"
-            )
-            response.raise_for_status()
-            toRw5file = response.json()
-        except Exception as e:
-            flash(f"Något gick fel: {str(e)}", "danger")
-            return redirect(
-                url_for("repo_content", owner=owner,
-                        repo_name=repo_name, path=path)
-            )
-
-        files = append_file(newContent, fromRw5Content,
-                            projCRS, toCRDfile, toRw5file)
-
-        if len(files) == 0:
-            flash("Ingen ändringar gjorda", "warning")
-            return redirect(
-                url_for("repo_content", owner=owner,
-                        repo_name=repo_name, path=path)
-            )
-
-        updated_files += files
-        commitMsg = f"Copied points to project {newPath.split("/")[-1]}. [skip ci]"
-        msg = (
-            f"{newPath.split("/")[-1]} Projektet uppdaterades framgångsrikt.",
-            "success",
-        )
-
-        # Extrahera mappens sökväg
-        directory_path = "/".join(newPath.split("/")[:-1])
-
-    # Skapa en commit som innehåller alla ändringar
-    commit_data = {
-        "branch": "main",
-        "message": commitMsg,
-        "files": updated_files,
-    }
-
-    # Skapa commiten via Gitea API
-    try:
-        commit_response = gitea.post(
-            f"{api_base_url}/repos/{owner}/{repo_name}/contents", json=commit_data
-        )
-        commit_response.raise_for_status()
-    except Exception as e:
-        flash(f"Något gick fel: {str(e)}", "danger")
-        return redirect(
-            url_for("repo_content", owner=owner,
-                    repo_name=repo_name, path=path)
-        )
-
-    # Visa ditt meddelande och återgå till rätt sida
-    flash(*msg)
-    return redirect(
-        url_for(
-            "repo_content",
-            owner=owner,
-            repo_name=repo_name,
-            path=directory_path,
-        )
+    refresh()
+    task = edit_file_task.apply_async(
+        args=[
+            repo_name,
+            path,
+            newPath,
+            owner,
+            newContent,
+            action,
+            projCRS,
+            session["oauth_token"]
+        ]
     )
-
-
-def append_file(newContent, fromRw5Content, projCRS: str, toCRDfile, toRw5file) -> list:
-    """Lägg till nytt innehåll i slutet av en fil"""
-
-    toRw5Content = base64.b64decode(toRw5file["content"]).decode(
-        "utf-8", errors="ignore"
-    )
-
-    # Kontrollera CRS.
-    current_rw5_info = read_rw5_data(toRw5Content)
-    if current_rw5_info["CRS"].lower() != projCRS.lower():
-        flash(f"Filen {toCRDfile} har ett annat koordinatsystem.", "warning")
-        return []
-
-    # Hämta punkter från rw5-filen.
-    newCrdJson = json.loads(newContent)
-    rw5Points = ""
-    for point in newCrdJson["points"]:
-        rw5Points += rw5get_point(fromRw5Content, point["id"])
-
-    # Räkna hur många punkter som redan fanns.
-    toCRDContent = crd_to_json(base64.b64decode(toCRDfile["content"]))
-    toCRDContent = json.loads(toCRDContent)
-    toCRDPointCount = get_point_len(toCRDContent)
-
-    # Ändra punktid på både crd och rw5
-    rw5Points = rw5changeID(rw5Points, toCRDPointCount)
-    change_point_id(newCrdJson, toCRDPointCount)
-
-    # Lägg på nya rw5 punkter och crd punkter till befintliga filer.
-    toRw5Content += rw5Points
-    toCRDContent["points"] += newCrdJson["points"]
-
-    # Convertera CRD till sträng
-    toCRDStr = json.dumps(toCRDContent)
-
-    return [
-        {
-            "operation": "update",
-            "path": toCRDfile["path"],
-            "content": _prepare_content(toCRDfile["path"], toCRDStr),
-            "sha": toCRDfile["sha"],
-        },
-        {
-            "operation": "update",
-            "path": toRw5file["path"],
-            "content": _prepare_content(toRw5file["path"], toRw5Content),
-        },
-    ]
-
-
-def create_file(newPath, newContent, fromRw5Content) -> list:
-    """Skapa en ny projektfil."""
-
-    # Skapa nytt RW5 innehåll.
-    newRw5Path = newPath.replace(".crd", ".rw5")
-    newRw5Content = get_rw5_header(fromRw5Content)
-    newJobbname = newPath.split("/")[-1].split(".")[0]
-    newRw5Content = rw5changeJobbName(newRw5Content, newJobbname)
-
-    # Loopa över punkterna i innehållet från blivande crd filen och lägg till dem i rw5
-    newCrdJson = json.loads(newContent)
-    for point in newCrdJson["points"]:
-        newRw5Content += rw5get_point(fromRw5Content, point["id"])
-
-    return [
-        {
-            "operation": "create",
-            "path": newPath,
-            "content": _prepare_content(newPath, newContent),
-        },
-        {
-            "operation": "create",
-            "path": newRw5Path,
-            "content": _prepare_content(newRw5Path, newRw5Content),
-        },
-    ]
-
-
-def _prepare_content(path: str, content: str) -> bytes:
-    """Preparera innehållet för att skrivas till repot"""
-
-    # Kontrollera om filen är en .crd-fil och konvertera om nödvändigt
-    if path.endswith(".crd"):
-        # Konvertera JSON-innehåll tillbaka till CRD-format
-        file_content = json_to_crd(content)
-        return base64.b64encode(file_content).decode("utf-8")
-    else:
-        # För vanliga textfiler, behandla innehållet som vanlig text
-        return base64.b64encode(content.encode("utf-8")).decode("utf-8")
+    return jsonify({"task_id": task.id}), 202
 
 
 @app.route("/repo/<owner>/<repo_name>/export_projekt", methods=["POST"])
@@ -870,10 +624,7 @@ def export_projekt(repo_name, owner):
     settingsFilePath = request.form.get("settingsFilePath")
 
     if not project or not exportCRS:
-        flash("Felaktiga parametrar, avbryter.", "warning")
-        return redirect(
-            url_for("repo_content", owner=owner, repo_name=repo_name, path="")
-        )
+        return jsonify({"error": "Felaktiga parametrar, avbryter."}), 400
 
     project = json.loads(project)
     path = project["path"]
