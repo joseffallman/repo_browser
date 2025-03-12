@@ -1389,6 +1389,12 @@
         button.addEventListener("click", function () {
 
             editFilePageWhenSaving = button.getAttribute('data-action');
+
+            var saveAsMessage = document.getElementById('saveAsModalMessage');
+            saveAsMessage.textContent = "";
+            var confirmButton = document.getElementById('confirmSaveBtn');
+            confirmButton.disabled = true;
+
             // Visa varningsmodalen
             var warningModal = document.getElementById('warningModal');
             var modal = new bootstrap.Modal(warningModal);
@@ -1404,12 +1410,15 @@
                     const saveAsModalMessage = document.getElementById('saveAsModalMessage');
                     if (exists) {
                         actionSelect.value = 'append';
-                        document.getElementById('saveAsModalMessage').textContent = "The file already exists. The points will be appended to the existing file.";
+                        document.getElementById('saveAsModalMessage').textContent = "Filen finns redan. Punkterna kommer kopieras in i befintlig fil.";
                     } else {
                         actionSelect.value = 'create';
-                        document.getElementById('saveAsModalMessage').textContent = "The file does not exist. A new file will be created.";
+                        document.getElementById('saveAsModalMessage').textContent = "Filen finns INTE. En ny fil kommer att skapas.";
                     }
+                    confirmButton.disabled = false;
                 });
+            } else {
+                confirmButton.disabled = false;
             }
         });
     });
