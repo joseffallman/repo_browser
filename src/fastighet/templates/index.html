@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="sv">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fastighetsindelning</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+</head>
+
+<body>
+    <h1>Välj ett område</h1>
+    <div id="map" style="width: 100%; height: 500px;"></div>
+    <button id="downloadBtn">Ladda ner DXF</button>
+
+    <script>
+        var map = L.map('map').setView([59.3293, 18.0686], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        var drawnBounds;
+        var maxSize = 0.01; // Cirka 1000 meter i lat/lng vid svenska breddgrader
+
+        function onMapClick(e) {
+            if (drawnBounds) {
+                map.removeLayer(drawnBounds);
+            }
+            var bounds = [[e.latlng.lat - maxSize / 2, e.latlng.lng - maxSize / 2], [e.latlng.lat + maxSize / 2, e.latlng.lng + maxSize / 2]];
+            drawnBounds = L.rectangle(bounds, { color: "blue", weight: 1 }).addTo(map);
+            map.fitBounds(bounds);
+        }
+
+        map.on('click', onMapClick);
+
+        document.getElementById("downloadBtn").addEventListener("click", function () {
+            if (!drawnBounds) {
+                alert("Vänligen välj ett område först.");
+                return;
+            }
+            var bbox = drawnBounds.getBounds().toBBoxString();
+            window.location.href = `/fastighet/download?bbox=${bbox}`;
+        });
+    </script>
+</body>
+
+</html>
