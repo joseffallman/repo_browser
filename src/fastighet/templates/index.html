@@ -12,36 +12,139 @@
 <body>
     <h1>Välj ett område</h1>
     <div id="map" style="width: 100%; height: 500px;"></div>
-    <button id="downloadBtn">Ladda ner DXF</button>
+
+    <button id="downloadBtn" onclick="startDownload()" disabled>Ladda ner DXF</button>
+
+    <!-- Länk för nedladdning -->
+    <div id="download-status" style="display: none;"></div>
+    <a id="download-link" href="#" style="display: none;">Om nedladdning inte startar automatiskt klicka här för att
+        starta!</a>
+
 
     <script>
-        var map = L.map('map').setView([59.3293, 18.0686], 10);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
-
-        var drawnBounds;
-        var maxSize = 0.01; // Cirka 1000 meter i lat/lng vid svenska breddgrader
-
-        function onMapClick(e) {
-            if (drawnBounds) {
-                map.removeLayer(drawnBounds);
-            }
-            var bounds = [[e.latlng.lat - maxSize / 2, e.latlng.lng - maxSize / 2], [e.latlng.lat + maxSize / 2, e.latlng.lng + maxSize / 2]];
-            drawnBounds = L.rectangle(bounds, { color: "blue", weight: 1 }).addTo(map);
-            map.fitBounds(bounds);
-        }
-
-        map.on('click', onMapClick);
-
-        document.getElementById("downloadBtn").addEventListener("click", function () {
+        function startDownload() {
             if (!drawnBounds) {
                 alert("Vänligen välj ett område först.");
                 return;
             }
             var bbox = drawnBounds.getBounds().toBBoxString();
-            window.location.href = `/fastighet/download?bbox=${bbox}`;
-        });
+            document.getElementById("downloadBtn").disabled = true;
+            statusbox = document.getElementById("download-status")
+            statusbox.style.display = "block";
+
+            // Skicka POST-begäran för att starta Celery-task
+            fetch('/fastighet/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bbox: bbox })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.task_id) {
+                        pollTaskStatus(data.task_id);
+                        statusbox.innerHTML = "Nedladdning av data från fastighetsregistret pågår. Stanna kvar på sidan tills klar.";
+                    } else {
+                        statusbox.innerHTML = "Ett fel inträffade: " + data.error;
+                    }
+                });
+        }
+
+        function pollTaskStatus(taskId) {
+            statusbox = document.getElementById("download-status")
+
+            fetch(`/fastighet/task_status/${taskId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.state === 'SUCCESS') {
+                        const downloadLink = document.getElementById("download-link");
+                        statusbox.innerHTML = "Nedladdning klar!";
+                        downloadLink.href = data.file_url;
+                        downloadLink.style.display = "block";
+
+                        // Skapa en dynamisk <a>-tagg för att starta nedladdningen
+                        const startDownloadLink = document.createElement('a');
+                        startDownloadLink.href = data.file_url;
+                        startDownloadLink.download = '';
+                        document.body.appendChild(startDownloadLink);
+                        startDownloadLink.click();
+                        document.body.removeChild(startDownloadLink);
+                    } else if (data.state === 'FAILURE') {
+                        statusbox.innerHTML = "Nedladdning misslyckades." + data.status;
+                    }
+                    else if (data.state === 'PENDING') {
+                        statusbox.innerHTML += ".";
+                        setTimeout(() => {
+                            pollTaskStatus(taskId);
+                        }, 1000);
+                    }
+                });
+        }
+    </script>
+    <script>
+        var map = L.map('map');
+
+        // Försök att hämta användarens position
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function (position) {
+                    // Om positionen är tillgänglig, zooma in på användarens plats
+                    var userLatLng = [position.coords.latitude, position.coords.longitude];
+                    map.setView(userLatLng, 13); // Zoomnivå 13 för att visa detaljerad vy
+                    L.marker(userLatLng).addTo(map)
+                },
+                function () {
+                    // Om användaren nekar åtkomst, visa hela Sverige
+                    showSwedenBounds();
+                }
+            );
+        } else {
+            // Om geolokalisering inte stöds, visa hela Sverige
+            showSwedenBounds();
+        }
+
+        function showSwedenBounds() {
+            var swedenBounds = [
+                [55.337, 10.592], // Sydvästra hörnet (Skåne)
+                [69.059, 24.167]  // Nordöstra hörnet (Lappland)
+            ];
+            map.fitBounds(swedenBounds);
+        }
+
+        // Lägg till OpenStreetMap-lager
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        var drawnBounds;
+
+        function onMapClick(e) {
+
+            if (drawnBounds) {
+                map.removeLayer(drawnBounds);
+                document.getElementById("download-status").style.display = "none";
+            }
+
+            // Definiera storleken på rutan i meter
+            var boxSizeMeters = 1000; // 1000 x 1000 meter
+
+            var lat = e.latlng.lat;
+            var lng = e.latlng.lng;
+
+            var metersToLat = boxSizeMeters / 111320; // 1 grad latitud ≈ 111.32 km
+            var metersToLng = boxSizeMeters / (40075000 * Math.cos((lat * Math.PI) / 180) / 360); // Längd varierar med latitud
+
+            var bounds = [
+                [lat - metersToLat / 2, lng - metersToLng / 2],
+                [lat + metersToLat / 2, lng + metersToLng / 2]
+            ];
+            drawnBounds = L.rectangle(bounds, { color: "blue", weight: 1 }).addTo(map);
+            map.fitBounds(bounds);
+
+            document.getElementById("downloadBtn").disabled = false;
+
+        }
+
+        map.on('click', onMapClick);
     </script>
 </body>
 

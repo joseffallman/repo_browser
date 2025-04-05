@@ -28,10 +28,6 @@ from __init__ import (
     client_secret,
     token_url,
 )
-from config import (
-    LM_consumer_key,
-    LM_consumer_secret,
-)
 from crd_reader import crd_to_json
 from crs_systems import crs_list
 from fastighet.routes import fastighetsindelning_bp
@@ -45,8 +41,6 @@ from tasks_routes import tasks_routes
 
 app = Flask(__name__)
 app.secret_key = os.getenv("secret_key")
-app.config['LM_consumer_key'] = LM_consumer_key
-app.config['LM_consumer_secret'] = LM_consumer_secret
 app.register_blueprint(tasks_routes, url_prefix="/api")
 app.register_blueprint(fastighetsindelning_bp, url_prefix="/fastighet")
 
