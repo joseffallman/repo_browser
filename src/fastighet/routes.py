@@ -6,12 +6,23 @@ from datetime import datetime, timedelta
 
 import ezdxf
 import requests
-from flask import Blueprint, jsonify, render_template, request, send_file, url_for
+from flask import (
+    Blueprint,
+    jsonify,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
+)
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # from tasks import celery
 from config import (
     LM_consumer_key,
     LM_consumer_secret,
+    login_required,
 )
 
 fastighetsindelning_bp = Blueprint(
@@ -26,6 +37,18 @@ LANTMATERIET_API_URL = "https://api.lantmateriet.se/ogc-features/v1/fastighetsin
 
 # En global dictionary för att hålla koll på temporära filer och deras utgångstid
 TEMP_FILES = {}
+
+
+# Funktion för att hämta användarens ID från Flask-sessionen
+def get_user_key():
+    # Fallback till IP om "user" saknas
+    return session.get("user", {}).get("id", get_remote_address())
+
+
+# Skapa en Limiter-instans
+limiter = Limiter(
+    key_func=get_user_key,
+)
 
 
 def get_access_token():
@@ -111,11 +134,14 @@ def download_and_create_dxf(self, bbox):
 
 
 @fastighetsindelning_bp.route('/')
+@login_required
 def index():
-    return render_template('index.html')
+    return render_template('fastighet.html')
 
 
 @fastighetsindelning_bp.route('/download', methods=['POST'])
+@limiter.limit("5 per hour")
+@login_required
 def download_dxf():
     bbox = request.json.get("bbox")
     if not bbox:
@@ -131,7 +157,20 @@ def download_dxf():
     from tasks import celery
     task = celery.send_task(
         "fastighet.routes.download_and_create_dxf", args=[bbox])
-    return jsonify({"task_id": task.id}), 202
+
+    # Hämta rate-limit-information från Flask-Limiter
+    limit = limiter.current_limit
+    remaining = limit.remaining
+    reset_at = limit.reset_at
+
+    return jsonify({
+        "task_id": task.id,
+        "rate_limit": {
+            "remaining": remaining,
+            "limit": limit.limit.amount,
+            "reset": reset_at
+        }
+    }), 202
 
 
 def cleanup_temp_files():

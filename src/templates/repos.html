@@ -12,6 +12,10 @@
     {% endfor %}
 </ul>
 
+<p>
+    <a href="{{ url_for('fastighet.index') }}" class="btn btn-primary">Nedladdning av fastighetskarta</a>
+</p>
+
 {% if is_admin %}
 <a href="{{ url_for('admin_dashboard') }}">Admin dashboard</a>
 {% endif %}

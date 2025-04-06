@@ -3,7 +3,6 @@ import json
 import os
 import re
 import time
-from functools import wraps
 
 from flask import (
     Flask,
@@ -28,9 +27,10 @@ from __init__ import (
     client_secret,
     token_url,
 )
+from config import login_required
 from crd_reader import crd_to_json
 from crs_systems import crs_list
-from fastighet.routes import fastighetsindelning_bp
+from fastighet.routes import fastighetsindelning_bp, limiter
 from gitea import (
     _prepare_content,
     fetch_file_content,
@@ -43,6 +43,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv("secret_key")
 app.register_blueprint(tasks_routes, url_prefix="/api")
 app.register_blueprint(fastighetsindelning_bp, url_prefix="/fastighet")
+limiter.init_app(app)
 
 
 @app.context_processor
@@ -56,19 +57,6 @@ def inject_global_variables():
 @app.route("/")
 def home():
     return render_template("home.html")
-
-
-def login_required(f):
-    """Decorator to ensure access token exists before accessing route."""
-
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if "oauth_token" not in session or "user" not in session:
-            flash("Du måste vara inloggad först.", "danger")
-            return redirect(url_for("home"))
-        return f(*args, **kwargs)
-
-    return decorated_function
 
 
 @app.route("/login")
