@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+{% endblock %}
+
+{% block title %}Nedladdning från Fastighetsregistret{% endblock %}
+{% block body %}
+
+<h5>Välj ett område</h5>
+<p>Klicka på kartan för att välja vilket ett område på ca 1000x1000meter som du vill ladda ned. Du kan max ladda ned 5
+    områden på en timme.</p>
+<p>Informationen hämtas direkt ifrån Lantmäteriets fastighetsregister och packas om till en dxf fil lämplig för
+    utsättning med rtk-gps. Koordinatsystemet på färdig DXF fil är <b>SWEREF 99 TM</b></p>
+<div id="map" style="width: 100%; height: 500px; margin:10px 0px"></div>
+
+<button type="button" class="btn btn-primary" id="downloadBtn" onclick="startDownload()" disabled>Ladda ner DXF</button>
+
+<!-- Länk för nedladdning -->
+<div id="download-status" style="display: none;"></div>
+<a id="download-link" href="#" style="display: none;">Om nedladdning inte startar automatiskt klicka här för att
+    starta!</a>
+<div id="rate-limit-info" style="margin-top: 10px; color: red;"></div>
+
+<p>
+    <a href="{{ url_for('repos') }}">Tillbaka till listan över projekt</a>
+</p>
+
+<div class="text-center">
+    <a href="{{ url_for('logout') }}" class="btn btn-primary btn-lg">
+        <i class="bi bi-door-open-fill"></i> Logga ut.
+    </a>
+</div>
+{% endblock %}
+
+
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script>
+    function startDownload() {
+        if (!drawnBounds) {
+            alert("Vänligen välj ett område först.");
+            return;
+        }
+        var bbox = drawnBounds.getBounds().toBBoxString();
+        document.getElementById("downloadBtn").disabled = true;
+        statusbox = document.getElementById("download-status")
+        statusbox.style.display = "block";
+
+        // Skicka POST-begäran för att starta Celery-task
+
+        fetch("{{ url_for('fastighet.download_dxf') }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bbox: bbox })
+        })
+            .then(response => {
+                if (response.status === 429) {
+                    statusbox.innerHTML = "För många begärningar. Försök igen senare.";
+                    throw new Error("Rate limit exceeded");
+                }
+                return response;
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.task_id) {
+                    pollTaskStatus(data.task_id);
+                    statusbox.innerHTML = "Nedladdning av data från fastighetsregistret pågår. Stanna kvar på sidan tills klar.";
+                } else {
+                    statusbox.innerHTML = "Ett fel inträffade: " + data.error;
+                }
+                if (data.rate_limit) {
+                    rateLimitInfo(data.rate_limit);
+                }
+            });
+    }
+
+    let resetTimeoutId; // Global variabel för att lagra timeout-ID
+    function rateLimitInfo(rate_limit) {
+        const remaining = rate_limit.remaining;
+        const limit = rate_limit.limit;
+
+        let resetTime = "unknown";
+        if (rate_limit.reset && !isNaN(rate_limit.reset)) {
+            resetTime = new Date(rate_limit.reset * 1000).toLocaleTimeString();
+
+            const resetDelay = (rate_limit.reset * 1000) - Date.now();
+            if (resetDelay > 0) {
+                // Rensa tidigare timeout om den finns
+                if (resetTimeoutId) {
+                    clearTimeout(resetTimeoutId);
+                }
+
+                // Schemalägg en ny timeout
+                resetTimeoutId = setTimeout(() => {
+                    document.getElementById("rate-limit-info").innerText = "";
+                }, resetDelay);
+            }
+        }
+
+        document.getElementById("rate-limit-info").innerText =
+            `Du har ${remaining} av ${limit} nedladdningar kvar denna timme. Återställs kl. ${resetTime}.`;
+    }
+
+    function pollTaskStatus(taskId) {
+        statusbox = document.getElementById("download-status")
+
+        fetch("{{ url_for('fastighet.task_status', task_id='taskId') }}".replace('taskId', taskId))
+            .then(response => response.json())
+            .then(data => {
+                if (data.state === 'SUCCESS') {
+                    const downloadLink = document.getElementById("download-link");
+                    statusbox.innerHTML = "Nedladdning klar!";
+                    downloadLink.href = data.file_url;
+                    downloadLink.style.display = "block";
+
+                    // Skapa en dynamisk <a>-tagg för att starta nedladdningen
+                    const startDownloadLink = document.createElement('a');
+                    startDownloadLink.href = data.file_url;
+                    startDownloadLink.download = '';
+                    document.body.appendChild(startDownloadLink);
+                    startDownloadLink.click();
+                    document.body.removeChild(startDownloadLink);
+                } else if (data.state === 'FAILURE') {
+                    statusbox.innerHTML = "Nedladdning misslyckades." + data.status;
+                }
+                else if (data.state === 'PENDING') {
+                    statusbox.innerHTML += ".";
+                    setTimeout(() => {
+                        pollTaskStatus(taskId);
+                    }, 1000);
+                }
+            });
+    }
+</script>
+<script>
+    var map = L.map('map');
+
+    // Försök att hämta användarens position
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            function (position) {
+                // Om positionen är tillgänglig, zooma in på användarens plats
+                var userLatLng = [position.coords.latitude, position.coords.longitude];
+                map.setView(userLatLng, 13); // Zoomnivå 13 för att visa detaljerad vy
+                L.marker(userLatLng).addTo(map)
+            },
+            function () {
+                // Om användaren nekar åtkomst, visa hela Sverige
+                showSwedenBounds();
+            }
+        );
+    } else {
+        // Om geolokalisering inte stöds, visa hela Sverige
+        showSwedenBounds();
+    }
+
+    function showSwedenBounds() {
+        var swedenBounds = [
+            [55.337, 10.592], // Sydvästra hörnet (Skåne)
+            [69.059, 24.167]  // Nordöstra hörnet (Lappland)
+        ];
+        map.fitBounds(swedenBounds);
+    }
+
+    // Lägg till OpenStreetMap-lager
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    var drawnBounds;
+
+    function onMapClick(e) {
+
+        if (drawnBounds) {
+            map.removeLayer(drawnBounds);
+            document.getElementById("download-status").style.display = "none";
+        }
+
+        // Definiera storleken på rutan i meter
+        var boxSizeMeters = 1000; // 1000 x 1000 meter
+
+        var lat = e.latlng.lat;
+        var lng = e.latlng.lng;
+
+        var metersToLat = boxSizeMeters / 111320; // 1 grad latitud ≈ 111.32 km
+        var metersToLng = boxSizeMeters / (40075000 * Math.cos((lat * Math.PI) / 180) / 360); // Längd varierar med latitud
+
+        var bounds = [
+            [lat - metersToLat / 2, lng - metersToLng / 2],
+            [lat + metersToLat / 2, lng + metersToLng / 2]
+        ];
+        drawnBounds = L.rectangle(bounds, { color: "blue", weight: 1 }).addTo(map);
+        map.fitBounds(bounds);
+
+        document.getElementById("downloadBtn").disabled = false;
+
+    }
+
+    map.on('click', onMapClick);
+</script>
+
+{% endblock %}
