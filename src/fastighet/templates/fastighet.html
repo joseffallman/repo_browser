@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block styles %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v10.2.1/ol.css">
 {% endblock %}
 
 {% block title %}Nedladdning från Fastighetsregistret{% endblock %}
@@ -36,14 +36,54 @@
 
 
 {% block scripts %}
-<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<!-- OpenLayers library -->
+<script src="https://cdn.jsdelivr.net/npm/ol@v10.2.1/dist/ol.js"></script>
+<!-- Proj4JS Library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.12.1/proj4.js"></script>
+
+<script>
+    // --==( KARTAN och dess funktioner )==--
+
+    // Definiera SWEREF 99 TM (EPSG:3006)
+    proj4.defs("EPSG:3006", "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
+
+    // Definiera SWEREF 99 13 30 (EPSG:3007)
+    proj4.defs("EPSG:3008", "+proj=tmerc +lat_0=0 +lon_0=13.5 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
+
+    // Definiera SWEREF 99 15 00 (EPSG:3008)
+    proj4.defs("EPSG:3009", "+proj=tmerc +lat_0=0 +lon_0=15 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
+
+    // Registrera proj4 i OpenLayers
+    ol.proj.proj4.register(proj4);
+
+    // Skapa kartan
+    var map = new ol.Map({
+        target: 'map',
+        layers: [
+            new ol.layer.Tile({
+                source: new ol.source.OSM()
+            })
+        ],
+        view: new ol.View({
+            projection: 'EPSG:3857',
+            center: ol.proj.fromLonLat([17.6389, 59.8586]), // WGS84 center (long, lat)
+            zoom: 18,
+            maxZoom: 30,
+        })
+    });
+</script>
+
 <script>
     function startDownload() {
-        if (!drawnBounds) {
+        if (!drawnBoundsLayer) {
             alert("Vänligen välj ett område först.");
             return;
         }
-        var bbox = drawnBounds.getBounds().toBBoxString();
+        // Hämta bounding box från den ritade polygonen
+        const extent = drawnBoundsLayer.getSource().getFeatures()[0].getGeometry().getExtent();
+        const [minX, minY, maxX, maxY] = ol.proj.transformExtent(extent, 'EPSG:3857', 'EPSG:4326');
+        const bbox = `${minX},${minY},${maxX},${maxY}`;
+
         document.getElementById("downloadBtn").disabled = true;
         statusbox = document.getElementById("download-status")
         statusbox.style.display = "block";
@@ -110,8 +150,13 @@
             .then(response => response.json())
             .then(data => {
                 if (data.state === 'SUCCESS') {
-                    const downloadLink = document.getElementById("download-link");
                     statusbox.innerHTML = "Nedladdning klar!";
+
+                    // Lägg till geojson-lager på kartan
+                    if (data.geojson) {
+                        addGeoJSONToMap(data.geojson);
+                    }
+                    const downloadLink = document.getElementById("download-link");
                     downloadLink.href = data.file_url;
                     downloadLink.style.display = "block";
 
@@ -135,16 +180,40 @@
     }
 </script>
 <script>
-    var map = L.map('map');
-
     // Försök att hämta användarens position
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             function (position) {
                 // Om positionen är tillgänglig, zooma in på användarens plats
-                var userLatLng = [position.coords.latitude, position.coords.longitude];
-                map.setView(userLatLng, 13); // Zoomnivå 13 för att visa detaljerad vy
-                L.marker(userLatLng).addTo(map)
+                const userLonLat = [position.coords.longitude, position.coords.latitude];
+                const userWebMercator = ol.proj.fromLonLat(userLonLat); // Konvertera till EPSG:3857
+                map.getView().setCenter(userWebMercator);
+                map.getView().setZoom(13); // Zoomnivå 13 för detaljerad vy
+
+                // Skapa en markör vid användarens plats
+                const userMarker = new ol.Feature({
+                    geometry: new ol.geom.Point(userWebMercator)
+                });
+
+                const markerStyle = new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 6,
+                        fill: new ol.style.Fill({ color: 'red' }),
+                        stroke: new ol.style.Stroke({ color: 'white', width: 2 })
+                    })
+                });
+
+                userMarker.setStyle(markerStyle);
+
+                const vectorSource = new ol.source.Vector({
+                    features: [userMarker]
+                });
+
+                const markerLayer = new ol.layer.Vector({
+                    source: vectorSource
+                });
+
+                map.addLayer(markerLayer);
             },
             function () {
                 // Om användaren nekar åtkomst, visa hela Sverige
@@ -157,48 +226,145 @@
     }
 
     function showSwedenBounds() {
-        var swedenBounds = [
-            [55.337, 10.592], // Sydvästra hörnet (Skåne)
-            [69.059, 24.167]  // Nordöstra hörnet (Lappland)
-        ];
-        map.fitBounds(swedenBounds);
+        const swedenExtent = ol.proj.transformExtent(
+            [10.592, 55.337, 24.167, 69.059], // Sydvästra och nordöstra hörnen i WGS84 (long, lat)
+            'EPSG:4326', // Ursprungligt koordinatsystem (WGS84)
+            'EPSG:3857'  // Målsystem (Web Mercator)
+        );
+        map.getView().fit(swedenExtent, { size: map.getSize(), maxZoom: 6 });
     }
 
     // Lägg till OpenStreetMap-lager
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
-    }).addTo(map);
+    const osmLayer = new ol.layer.Tile({
+        source: new ol.source.OSM()
+    });
+    map.addLayer(osmLayer);
 
-    var drawnBounds;
+    var drawnBoundsLayer;
 
-    function onMapClick(e) {
+    function onMapClick(event) {
 
-        if (drawnBounds) {
-            map.removeLayer(drawnBounds);
+        if (drawnBoundsLayer) {
+            map.removeLayer(drawnBoundsLayer);
             document.getElementById("download-status").style.display = "none";
         }
 
         // Definiera storleken på rutan i meter
-        var boxSizeMeters = 1000; // 1000 x 1000 meter
+        const boxSizeMeters = 1000; // 1000 x 1000 meter
 
-        var lat = e.latlng.lat;
-        var lng = e.latlng.lng;
+        // Hämta klickad position i EPSG:3857
+        const clickedCoord = event.coordinate;
 
-        var metersToLat = boxSizeMeters / 111320; // 1 grad latitud ≈ 111.32 km
-        var metersToLng = boxSizeMeters / (40075000 * Math.cos((lat * Math.PI) / 180) / 360); // Längd varierar med latitud
+        // Konvertera till WGS84 för beräkningar
+        const [lng, lat] = ol.proj.toLonLat(clickedCoord);
 
-        var bounds = [
-            [lat - metersToLat / 2, lng - metersToLng / 2],
-            [lat + metersToLat / 2, lng + metersToLng / 2]
+        // Beräkna latitud- och longitudavstånd baserat på jordens krökning
+        const metersToLat = boxSizeMeters / 111320; // 1 grad latitud ≈ 111.32 km
+        const metersToLng = boxSizeMeters / (40075000 * Math.cos((lat * Math.PI) / 180) / 360); // Längd varierar med latitud
+
+        // Skapa bounding box
+        const bounds = [
+            [lng - metersToLng / 2, lat - metersToLat / 2],
+            [lng + metersToLng / 2, lat + metersToLat / 2]
         ];
-        drawnBounds = L.rectangle(bounds, { color: "blue", weight: 1 }).addTo(map);
-        map.fitBounds(bounds);
+
+        // Konvertera bounding box till EPSG:3857
+        const extent = ol.proj.transformExtent(
+            [bounds[0][0], bounds[0][1], bounds[1][0], bounds[1][1]],
+            'EPSG:4326',
+            'EPSG:3857'
+        );
+
+        // Skapa en vektor för att rita rutan
+        const feature = new ol.Feature({
+            geometry: new ol.geom.Polygon.fromExtent(extent)
+        });
+
+        const vectorSource = new ol.source.Vector({
+            features: [feature]
+        });
+
+        drawnBoundsLayer = new ol.layer.Vector({
+            source: vectorSource,
+            style: new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: 'blue',
+                    width: 2
+                }),
+                fill: new ol.style.Fill({
+                    color: 'rgba(0, 0, 255, 0.1)'
+                })
+            })
+        });
+
+        // Lägg till rutan på kartan
+        map.addLayer(drawnBoundsLayer);
 
         document.getElementById("downloadBtn").disabled = false;
 
     }
 
-    map.on('click', onMapClick);
+    map.on('singleclick', onMapClick);
+</script>
+
+<script>
+    function addGeoJSONToMap(geojson) {
+        if (typeof geojson === 'string') {
+            geojson = JSON.parse(geojson);
+        }
+        geojson = flipCoordinates(geojson); // Om GeoJSON är i SWEREF 99 TM
+        const features = transformGeoJSON(geojson, 'EPSG:3006', 'EPSG:3857'); // Om GeoJSON är i SWEREF 99 TM
+        const vectorSource = new ol.source.Vector({
+            features: features
+        });
+
+        const vectorLayer = new ol.layer.Vector({
+            source: vectorSource,
+            style: new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: 'gray', // Ljusgrå linje
+                    width: 2,
+                    lineDash: [4, 4] // Streckad linje (4px streck, 4px mellanrum)
+                }),
+                fill: new ol.style.Fill({
+                    color: 'rgba(211, 211, 211, 0.5)' // Ljusgrå genomskinlig fyllning
+                })
+            })
+        });
+
+        map.addLayer(vectorLayer);
+        map.getView().fit(vectorSource.getExtent(), {
+            size: map.getSize(),
+            padding: [20, 20, 20, 20],
+            maxZoom: 20
+        });
+
+    }
+    function transformGeoJSON(geojson, sourceProjection = 'EPSG:4326', targetProjection = 'EPSG:3857') {
+        const format = new ol.format.GeoJSON();
+        const features = format.readFeatures(geojson, {
+            dataProjection: sourceProjection,
+            featureProjection: targetProjection
+        });
+        return features;
+    }
+    function flipCoordinates(geojson) {
+        geojson.features.forEach(feature => {
+            const coords = feature.geometry.coordinates;
+
+            function flip(coord) {
+                return coord.map(ring => ring.map(([y, x]) => [x, y]));
+            }
+
+            if (feature.geometry.type === 'Polygon') {
+                feature.geometry.coordinates = flip(coords);
+            }
+
+            // Lägg till stöd för MultiPolygon eller andra typer om du har dem
+        });
+
+        return geojson;
+    }
 </script>
 
 {% endblock %}

@@ -130,7 +130,16 @@ def download_and_create_dxf(self, bbox):
 
     data = fetch_property_data(bbox)
     dxf_str = create_dxf(data)
-    return dxf_str.encode('utf-8')
+
+    geojson_data = {
+        "type": "FeatureCollection",
+        "features": data
+    }
+
+    return {
+        "geojson": geojson_data,
+        "dxf": dxf_str.encode('utf-8')
+    }
 
 
 @fastighetsindelning_bp.route('/')
@@ -197,6 +206,8 @@ def task_status(task_id):
     elif task.state == 'SUCCESS':
         # Skapa en temporär fil för DXF-innehållet
         if task_id not in TEMP_FILES:
+            # result = task.info
+
             # Skapa en temporär fil med mkstemp
             fd, temp_file_path = tempfile.mkstemp(
                 prefix="fastighet_",
@@ -204,7 +215,7 @@ def task_status(task_id):
                 dir="/tmp"
             )
             with os.fdopen(fd, 'wb') as temp_file:
-                temp_file.write(task.result)
+                temp_file.write(task.info["dxf"])
 
             # Lägg till filen i TEMP_FILES med en utgångstid på 24 timmar
             TEMP_FILES[task_id] = {
@@ -214,8 +225,12 @@ def task_status(task_id):
 
         # Returnera filens URL
         file_url = url_for("fastighet.download_file", task_id=task_id)
-        response = {"state": task.state,
-                    "status": "Task completed!", "file_url": file_url}
+        response = {
+            "state": task.state,
+            "status": "Task completed!",
+            "file_url": file_url,
+            "geojson": task.info["geojson"]
+        }
     elif task.state == 'FAILURE':
         response = {"state": task.state, "status": str(task.info)}
     else:
