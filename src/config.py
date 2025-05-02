@@ -8,6 +8,7 @@ load_dotenv()
 
 LM_consumer_key = os.getenv("LM_consumer_key")
 LM_consumer_secret = os.getenv("LM_consumer_secret")
+jocoding_validation_url = os.getenv("jocoding_validation_url")
 
 
 def login_required(f):

@@ -1,9 +1,9 @@
 import io
 
 import ezdxf
-import pytest
 
-from src.fastighet.routes import create_dxf
+from src.fastighet.routes import validate_license_and_email
+from src.fastighet.tasks import create_dxf
 
 
 def test_create_dxf():
@@ -65,3 +65,46 @@ def test_create_dxf():
     # Spara DXF-filen för manuell inspektion
     with open("/workspace/tests/output/test_output.dxf", "w") as f:
         f.write(dxf_data)
+
+
+def test_validate_license_and_email_valid(requests_mock):
+    # Mocka den externa verifierings-URL:en
+    requests_mock.get(
+        "https://din-verifierings-url.se/validate",
+        json={"valid": True},
+        status_code=200
+    )
+
+    result = validate_license_and_email(
+        "VALID_API_KEY_12345", "test@example.com")
+    assert result is True
+
+
+def test_validate_license_and_email_invalid_email():
+    result = validate_license_and_email("VALID_API_KEY_12345", "invalid-email")
+    assert result is False
+
+
+def test_validate_license_and_email_invalid_license():
+    result = validate_license_and_email("short", "test@example.com")
+    assert result is False
+
+
+def test_validate_license_and_email_external_api_rejects(requests_mock):
+    requests_mock.get(
+        "https://din-verifierings-url.se/validate",
+        json={"valid": False},
+        status_code=200
+    )
+
+    result = validate_license_and_email(
+        "VALID_API_KEY_12345", "test@example.com")
+    assert result is False
+
+
+def test_validate_license_and_email_request_exception(requests_mock):
+    requests_mock.get("https://din-verifierings-url.se/validate",
+                      exc=Exception("Network error"))
+    result = validate_license_and_email(
+        "VALID_API_KEY_12345", "test@example.com")
+    assert result is False

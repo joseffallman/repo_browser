@@ -1,11 +1,7 @@
-import base64
-import io
 import os
 import tempfile
 from datetime import datetime, timedelta
 
-import ezdxf
-import requests
 from flask import (
     Blueprint,
     jsonify,
@@ -18,12 +14,13 @@ from flask import (
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-# from tasks import celery
 from config import (
-    LM_consumer_key,
-    LM_consumer_secret,
     login_required,
 )
+from jocoding import validate_license_and_email
+from tasks import celery
+
+from .bbox import degrees_to_meters
 
 fastighetsindelning_bp = Blueprint(
     'fastighet',
@@ -32,11 +29,10 @@ fastighetsindelning_bp = Blueprint(
     template_folder='templates'
 )
 
-LANTMATERIET_TOKEN_URL = "https://apimanager.lantmateriet.se/oauth2/token"
-LANTMATERIET_API_URL = "https://api.lantmateriet.se/ogc-features/v1/fastighetsindelning/collections/registerenhetsomradesytor/items"
-
 # En global dictionary för att hålla koll på temporära filer och deras utgångstid
 TEMP_FILES = {}
+
+MAX_METERS = 1000
 
 
 # Funktion för att hämta användarens ID från Flask-sessionen
@@ -49,97 +45,6 @@ def get_user_key():
 limiter = Limiter(
     key_func=get_user_key,
 )
-
-
-def get_access_token():
-    """ Hämtar OAuth2 access token från Lantmäteriets API """
-    client_id = LM_consumer_key
-    client_secret = LM_consumer_secret
-    credentials = f"{client_id}:{client_secret}"
-    encoded_credentials = base64.b64encode(credentials.encode()).decode()
-
-    headers = {
-        "Authorization": f"Basic {encoded_credentials}",
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-    data = "grant_type=client_credentials&scope=ogc-features:fastighetsindelning.read"
-
-    response = requests.post(LANTMATERIET_TOKEN_URL,
-                             headers=headers, data=data)
-    response.raise_for_status()
-    return response.json().get('access_token')
-
-
-def fetch_property_data(bbox):
-    """ Hämtar registerenhetsomradesytor från Lantmäteriets API baserat på bbox """
-    token = get_access_token()
-    headers = {"Authorization": f"Bearer {token}"}
-    all_features = []  # För att lagra alla objekt
-
-    offset = 0  # Börja från första sidan
-    limit = 100  # Antal objekt per begäran (kan justeras om det behövs)
-
-    while True:
-        params = {
-            "bbox": bbox,
-            "crs": "http://www.opengis.net/def/crs/EPSG/0/3006",
-            "offset": offset,
-            "limit": limit
-        }
-
-        response = requests.get(LANTMATERIET_API_URL,
-                                headers=headers, params=params)
-        response.raise_for_status()
-
-        data = response.json()
-        features = data.get("features", [])
-
-        all_features.extend(features)
-
-        # Om antalet returnerade objekt är mindre än 'limit', har vi hämtat alla objekt
-        if len(features) < limit:
-            break
-
-        offset += limit
-
-    return all_features
-
-
-def create_dxf(data):
-    """ Skapar en DXF-fil från geojson data """
-    doc = ezdxf.new()
-    msp = doc.modelspace()
-
-    for feature in data:
-        if "geometry" in feature and feature["geometry"].get("type") == "Polygon":
-            for coords in feature["geometry"]["coordinates"]:
-                if isinstance(coords, list) and all(isinstance(point, list) and len(point) == 2 for point in coords):
-                    points = [(float(y), float(x)) for x, y in coords]
-                    msp.add_lwpolyline(
-                        points, close=True)
-
-    dxf_stream = io.StringIO()
-    doc.write(dxf_stream)
-    dxf_stream.seek(0)
-    return dxf_stream.getvalue()
-
-
-# @celery.task(bind=True, name="fastighet.routes.download_and_create_dxf")
-def download_and_create_dxf(self, bbox):
-    """Celery task to download data and create DXF"""
-
-    data = fetch_property_data(bbox)
-    dxf_str = create_dxf(data)
-
-    geojson_data = {
-        "type": "FeatureCollection",
-        "features": data
-    }
-
-    return {
-        "geojson": geojson_data,
-        "dxf": dxf_str.encode('utf-8')
-    }
 
 
 @fastighetsindelning_bp.route('/')
@@ -163,11 +68,61 @@ def download_dxf():
         print("Unable to clean temp files" + e)
 
     # Starta Celery-task
-    from tasks import celery
     task = celery.send_task(
         "fastighet.routes.download_and_create_dxf", args=[bbox])
 
     # Hämta rate-limit-information från Flask-Limiter
+    limit = limiter.current_limit
+    remaining = limit.remaining
+    reset_at = limit.reset_at
+
+    return jsonify({
+        "task_id": task.id,
+        "rate_limit": {
+            "remaining": remaining,
+            "limit": limit.limit.amount,
+            "reset": reset_at
+        }
+    }), 202
+
+
+@fastighetsindelning_bp.route('/api/download', methods=['POST'])
+@limiter.limit("5 per hour", key_func=get_remote_address)
+def api_download_dxf():
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        return jsonify({"error": "Missing Authorization header"}), 401
+
+    try:
+        token_type, credentials = auth_header.split(" ")
+        license_key, email = credentials.split("|")
+    except ValueError:
+        return jsonify({"error": "Invalid Authorization header format"}), 401
+
+    if not validate_license_and_email(license_key, email):
+        return jsonify({"error": "Invalid license or email"}), 401
+
+    bbox_str = request.json.get("bbox")
+    if not bbox_str:
+        return jsonify({"error": "Bounding box (bbox) parameter is required"}), 400
+
+    try:
+        minx, miny, maxx, maxy = map(float, bbox_str.split(","))
+    except ValueError:
+        return jsonify({"error": "Invalid bbox format"}), 400
+
+    width_m, height_m = degrees_to_meters(minx, miny, maxx, maxy)
+    if width_m > MAX_METERS or height_m > MAX_METERS:
+        return jsonify({"error": "Bounding box exceeds 1000x1000 meter limit"}), 400
+
+    try:
+        cleanup_temp_files()
+    except Exception as e:
+        print("Unable to clean temp files: " + str(e))
+
+    task = celery.send_task(
+        "fastighet.routes.download_and_create_dxf", args=[bbox_str])
+
     limit = limiter.current_limit
     remaining = limit.remaining
     reset_at = limit.reset_at
@@ -198,7 +153,6 @@ def cleanup_temp_files():
 @fastighetsindelning_bp.route('/task_status/<task_id>', methods=['GET'])
 def task_status(task_id):
     """Kontrollerar status för en Celery-task och hanterar temporära filer"""
-    from tasks import celery
     task = celery.AsyncResult(task_id)
 
     if task.state == 'PENDING':
