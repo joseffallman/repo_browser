@@ -179,6 +179,13 @@
             });
     }
 </script>
+{% if rate_info %}
+<script>
+    const rateInfo = {{ rate_info | tojson }};
+    // Anropa en JavaScript-funktion med detta objekt
+    rateLimitInfo(rateInfo);
+</script>
+{% endif %}
 <script>
     // Försök att hämta användarens position
     if (navigator.geolocation) {

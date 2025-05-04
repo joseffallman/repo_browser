@@ -4,7 +4,7 @@ import base64
 import requests
 
 # from tasks import celery
-from config import (
+from ..config import (
     LM_consumer_key,
     LM_consumer_secret,
 )

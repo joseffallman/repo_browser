@@ -4,12 +4,12 @@ import json
 from requests import HTTPError
 from requests_oauthlib import OAuth2Session
 
-from __init__ import api_base_url
-from crd_reader import change_point_id, crd_to_json, get_point_len, json_to_crd
-from rw5_reader import change_jobb_name as rw5changeJobbName
-from rw5_reader import change_point_id as rw5changeID
-from rw5_reader import get_point as rw5get_point
-from rw5_reader import (
+from .config import api_base_url
+from .crd_reader import change_point_id, crd_to_json, get_point_len, json_to_crd
+from .rw5_reader import change_jobb_name as rw5changeJobbName
+from .rw5_reader import change_point_id as rw5changeID
+from .rw5_reader import get_point as rw5get_point
+from .rw5_reader import (
     get_rw5_header,
     read_rw5_data,
 )

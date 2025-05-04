@@ -35,6 +35,19 @@
                 "-f",
                 "redis"
             ],
+        },
+        {
+            "label": "Flask DB Upgrade",
+            "type": "shell",
+            "command": "flask db upgrade",
+            "options": {
+                "cwd": "${workspaceFolder}/src"
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
         }
     ]
 }

@@ -2,7 +2,7 @@ import re
 
 import requests
 
-from config import jocoding_validation_url
+from .config import jocoding_validation_url
 
 
 def is_valid_email(email: str) -> bool:

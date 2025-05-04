@@ -1,9 +1,11 @@
+import json
 import os
 import tempfile
 from datetime import datetime, timedelta
 
 from flask import (
     Blueprint,
+    current_app,
     jsonify,
     render_template,
     request,
@@ -14,13 +16,14 @@ from flask import (
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-from config import (
+from ..config import (
     login_required,
 )
-from jocoding import validate_license_and_email
-from tasks import celery
-
+from ..db import db
+from ..jocoding import validate_license_and_email
+from ..tasks import celery
 from .bbox import degrees_to_meters
+from .models import TaskTracker
 
 fastighetsindelning_bp = Blueprint(
     'fastighet',
@@ -50,7 +53,23 @@ limiter = Limiter(
 @fastighetsindelning_bp.route('/')
 @login_required
 def index():
-    return render_template('fastighet.html')
+    trackers = TaskTracker.query.filter(
+        TaskTracker.user_id == session["user"]['email'],
+        TaskTracker.rate_limit_reset >= datetime.now()
+    ).order_by(TaskTracker.created_at.desc()).all()
+
+    tracker = trackers[0] if trackers else None
+    if tracker:
+        rate_info = {
+            "remaining": tracker.rate_limit_remaining,
+            "limit": tracker.rate_limit_total,
+            "reset": int(tracker.rate_limit_reset.timestamp()),
+            "task_id": tracker.task_id
+        }
+    else:
+        rate_info = None
+
+    return render_template('fastighet.html', rate_info=rate_info)
 
 
 @fastighetsindelning_bp.route('/download', methods=['POST'])
@@ -75,6 +94,19 @@ def download_dxf():
     limit = limiter.current_limit
     remaining = limit.remaining
     reset_at = limit.reset_at
+
+    # Spara task info i DB
+    tracker = TaskTracker(
+        # Du använder session['user']['email']
+        user_id=session["user"]['email'],
+        task_id=task.id,
+        rate_limit_remaining=remaining,
+        rate_limit_total=limit.limit.amount,
+        rate_limit_reset=datetime.fromtimestamp(reset_at),
+        bbox=bbox,
+    )
+    db.session.add(tracker)
+    db.session.commit()
 
     return jsonify({
         "task_id": task.id,
@@ -125,7 +157,19 @@ def api_download_dxf():
 
     limit = limiter.current_limit
     remaining = limit.remaining
-    reset_at = limit.reset_at
+    reset_at = datetime.fromtimestamp(limit.reset_at)
+
+    # Spara task info i DB
+    tracker = TaskTracker(
+        user_id=email,
+        task_id=task.id,
+        rate_limit_remaining=remaining,
+        rate_limit_total=limit.limit.amount,
+        rate_limit_reset=reset_at,
+        bbox=bbox_str,
+    )
+    db.session.add(tracker)
+    db.session.commit()
 
     return jsonify({
         "task_id": task.id,
@@ -176,6 +220,14 @@ def task_status(task_id):
                 "file_path": temp_file_path,
                 "expires_at": datetime.now() + timedelta(hours=24)
             }
+
+            # Uppdatera TaskTracker med filens sökväg
+            tracker = TaskTracker.query.filter_by(task_id=task_id).first()
+            if tracker and not tracker.file_path:
+                tracker.file_path = temp_file_path
+                tracker.expires_at = datetime.now() + timedelta(hours=24)
+                tracker.geojson = json.dumps(task.info["geojson"])
+                db.session.commit()
 
         # Returnera filens URL
         file_url = url_for("fastighet.download_file", task_id=task_id)

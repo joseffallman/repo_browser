@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request, url_for
 
-from tasks import (
+from .tasks import (
     add,
     edit_file_task,
 )

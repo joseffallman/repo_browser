@@ -10,17 +10,18 @@
             "request": "launch",
             "module": "flask",
             "env": {
-                "FLASK_APP": "app.py",
+                "FLASK_APP": "${workspaceFolder}/src/app.py",
                 "FLASK_DEBUG": "1"
             },
-            "cwd": "${workspaceFolder}/src",
+            "cwd": "${workspaceFolder}",
             "args": [
                 "run",
                 "--no-debugger",
-                "--no-reload"
             ],
             "jinja": true,
             "autoStartBrowser": false,
+            "justMyCode": true,
+            "consoleName": "Flask",
             // "preLaunchTask": "start-redis-container",
             // "postDebugTask": "stop-redis-container"
         },
@@ -29,11 +30,13 @@
             "type": "debugpy",
             "request": "launch",
             "module": "celery",
-            "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/src",
+            "justMyCode": true,
+            "consoleName": "Celery",
+            // "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
             "args": [
                 "--app",
-                "tasks.celery",
+                "src.tasks.celery",
                 "worker",
                 "--loglevel",
                 "DEBUG",
