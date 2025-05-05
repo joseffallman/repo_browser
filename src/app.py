@@ -14,10 +14,11 @@ from flask import (
     session,
     url_for,
 )
+from flask_migrate import Migrate
 from requests.exceptions import HTTPError
 from requests_oauthlib import OAuth2Session
 
-from __init__ import (
+from config import (
     api_base_url,
     app_url,
     authorization_base_url,
@@ -30,6 +31,7 @@ from __init__ import (
 from config import login_required
 from crd_reader import crd_to_json
 from crs_systems import crs_list
+from db import db
 from fastighet.routes import fastighetsindelning_bp, limiter
 from gitea import (
     _prepare_content,
@@ -44,6 +46,16 @@ app.secret_key = os.getenv("secret_key")
 app.register_blueprint(tasks_routes, url_prefix="/api")
 app.register_blueprint(fastighetsindelning_bp, url_prefix="/fastighet")
 limiter.init_app(app)
+
+# Konfigurera SQLite som databas
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////app/data/app.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db.init_app(app)
+with app.app_context():
+    # Skapa databasen och tabellerna om de inte redan finns
+    db.create_all()
+migrate = Migrate(app, db)
 
 
 @app.context_processor

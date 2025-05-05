@@ -35,6 +35,40 @@
                 "-f",
                 "redis"
             ],
+        },
+        {
+            "label": "Flask DB Upgrade",
+            "type": "shell",
+            "command": "flask db upgrade",
+            "options": {
+                "cwd": "${workspaceFolder}/src"
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Flask DB Migrate",
+            "type": "shell",
+            "command": "flask db migrate -m '${input:commitMsg}' && flask db upgrade",
+            "options": {
+                "cwd": "${workspaceFolder}/src"
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ],
+    "inputs": [
+        {
+            "id": "commitMsg",
+            "type": "promptString",
+            "description": "Migration message",
+            "default": "auto migration"
         }
     ]
 }

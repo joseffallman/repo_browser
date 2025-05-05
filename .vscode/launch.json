@@ -21,6 +21,7 @@
             ],
             "jinja": true,
             "autoStartBrowser": false,
+            "consoleName": "Flask"
             // "preLaunchTask": "start-redis-container",
             // "postDebugTask": "stop-redis-container"
         },
@@ -29,7 +30,6 @@
             "type": "debugpy",
             "request": "launch",
             "module": "celery",
-            "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/src",
             "args": [
                 "--app",
@@ -39,7 +39,8 @@
                 "DEBUG",
                 "--pool",
                 "solo",
-            ]
+            ],
+            "consoleName": "Celery"
         },
     ],
     "compounds": [

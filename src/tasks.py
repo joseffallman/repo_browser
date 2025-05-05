@@ -3,7 +3,7 @@ import time
 from celery import Celery
 from requests_oauthlib import OAuth2Session
 
-from __init__ import api_base_url, celery_broker_url, celery_result_backend, client_id
+from config import api_base_url, celery_broker_url, celery_result_backend, client_id
 from fastighet.tasks import download_and_create_dxf
 from gitea import (
     CRSMISSMATCH,

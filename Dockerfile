@@ -24,6 +24,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Kopiera hela applikationen till containern
 COPY src/ .
+RUN mkdir -p /app/data
+
+# Kopiera entrypoint-skriptet
+COPY entrypoint.sh entrypoint.sh
+RUN chmod +x entrypoint.sh
 
 # Ändra ägare av applikationsfiler till den icke-root användaren
 RUN chown -R flaskuser:flaskuser /app
@@ -35,4 +40,4 @@ USER flaskuser
 EXPOSE 8000
 
 # Kör applikationen med Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]
+CMD ["./entrypoint.sh"]
