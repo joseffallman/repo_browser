@@ -20,11 +20,14 @@ CELERY_RESULT_BACKEND=
 ```
 
 ## docker-compose.yml
-Example of docker compose file for running the app
+Example of docker compose file for running the app.
+Save this to docker-compose.yml to repo and enter
+docker-compose up --build
 ```
 services:
   repo_browser:
     # image: ghcr.io/joseffallman/repo_browser:main
+    image: repo_browser_image
     build: .
     container_name: repo_browser
     environment:
@@ -34,17 +37,20 @@ services:
       gitea_url: https://your.gitea.instance/
       app_url: https://your.domain.for.this.app/
       OAUTHLIB_INSECURE_TRANSPORT: true
-    restart: always
+    volumes:
+      - ./data:/app/data  # Some place to store the SQLite db file.
+    ports:
+      - "5000:8000"
     networks:
       - nginx_nginx
     depends_on:
       - redis
 
   celery_worker:
-    image: mcr.microsoft.com/devcontainers/python:1-3.12-bullseye
+    image: repo_browser_image
     container_name: celery_worker
     depends_on:
-      - jocoding_cloud
+      - repo_browser
     networks:
       - nginx_nginx
     working_dir: /app
@@ -52,12 +58,16 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     command: >
-      celery -A tasks.celery worker
+      celery -A src.tasks.celery worker
 
   redis:
     image: redis:latest
     networks:
       - nginx_nginx
+
+networks:
+  nginx_nginx:
+    external: false
 
 ```
 

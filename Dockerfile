@@ -15,6 +15,7 @@ ARG BUILD_VERSION=0
 ARG BUILD_DATE=0
 ENV BUILD_VERSION=$BUILD_VERSION
 ENV BUILD_DATE=$BUILD_DATE
+ENV PYTHONPATH=/app/src
 
 RUN echo "BUILD_VERSION=$BUILD_VERSION"
 RUN echo "BUILD_DATE=$BUILD_DATE"
@@ -23,7 +24,7 @@ RUN echo "BUILD_DATE=$BUILD_DATE"
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Kopiera hela applikationen till containern
-COPY src/ .
+COPY src/ src/
 RUN mkdir -p /app/data
 
 # Kopiera entrypoint-skriptet
