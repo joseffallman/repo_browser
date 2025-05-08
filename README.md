@@ -1,6 +1,10 @@
 # A flask app to browse, add and edit files in a gitea repository.
 This is a proof of concept of a web app to browse and edit files (survey files from carlson survpc) in a gitea repository.
 
+If a volume is mounted to repo_browser /app/data to save database file, user uid 1000 and gid 1000 needs to be the owner.
+sudo chown -R 1000:1000 ./data
+if ./data is the directory mounted to /app/data
+
 ## .env
 Add this secrets and enviroment variables in a .env file or insert them in another way into the app:
 ```
