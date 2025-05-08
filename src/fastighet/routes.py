@@ -44,6 +44,7 @@ def get_user_key():
 # Skapa en Limiter-instans
 limiter = Limiter(
     key_func=get_user_key,
+    storage_uri="redis://redis:6379/1",
 )
 
 
