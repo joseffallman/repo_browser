@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 from datetime import datetime, timedelta
@@ -19,6 +20,7 @@ from config import (
 )
 from jocoding import validate_license_and_email
 from tasks import celery
+from db import db, TaskTracker
 
 from .bbox import degrees_to_meters
 
@@ -28,9 +30,6 @@ fastighetsindelning_bp = Blueprint(
     url_prefix='/fastighet',
     template_folder='templates'
 )
-
-# En global dictionary för att hålla koll på temporära filer och deras utgångstid
-TEMP_FILES = {}
 
 MAX_METERS = 1000
 
@@ -51,7 +50,61 @@ limiter = Limiter(
 @fastighetsindelning_bp.route('/')
 @login_required
 def index():
+    cleanup_temp_files()
     return render_template('fastighet.html')
+
+
+@fastighetsindelning_bp.route('/api/trackers', methods=['GET'])
+@login_required
+def get_trackers():
+    cleanup_temp_files()
+    trackers = TaskTracker.query.filter(
+        TaskTracker.user_email == session["user"]['email'],
+        TaskTracker.rate_limit_reset >= datetime.now()
+    ).order_by(TaskTracker.created_at.asc()).all()
+
+    tracker:TaskTracker = trackers[0] if trackers else None
+    if tracker:
+        rate_info = {
+            "remaining": tracker.rate_limit_remaining,
+            "limit": tracker.rate_limit_total,
+            "reset": int(tracker.rate_limit_reset.timestamp()),
+            "task_id": tracker.task_id
+        }
+    else:
+        rate_info = None
+
+    tracker_list = [
+        {
+            "task_id": t.task_id,
+            "created_at": t.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            "reset": int(t.rate_limit_reset.timestamp()),
+            "bbox": t.bbox,
+            "geojson": t.geojson,
+            "download_url": url_for("fastighet.download_file", task_id=t.task_id)
+        }
+        for t in trackers
+    ]
+
+    return jsonify({"trackers": tracker_list, "rate_info": rate_info})
+
+
+@fastighetsindelning_bp.route('/api/get_working_tasks')
+@login_required
+def get_working_tasks():
+    # Hämta alla aktiva tasks för den inloggade användaren
+    trackers = TaskTracker.query.filter(
+        TaskTracker.user_email == session["user"]['email'],
+        TaskTracker.expires_at == None,
+        TaskTracker.file_path == None,
+        ).all()
+
+    if not trackers:
+        return jsonify({"tasks": []}), 200
+
+    # Skapa en lista med task_id:n
+    task_ids = [tracker.task_id for tracker in trackers]
+    return jsonify({"tasks": task_ids}), 200
 
 
 @fastighetsindelning_bp.route('/download', methods=['POST'])
@@ -76,6 +129,18 @@ def download_dxf():
     limit = limiter.current_limit
     remaining = limit.remaining
     reset_at = limit.reset_at
+
+    # Spara task info i DB
+    tracker = TaskTracker(
+        user_email=session["user"]['email'],
+        task_id=task.id,
+        rate_limit_remaining=remaining,
+        rate_limit_total=limit.limit.amount,
+        rate_limit_reset=datetime.fromtimestamp(reset_at),
+        bbox=bbox,
+    )
+    db.session.add(tracker)
+    db.session.commit()
 
     return jsonify({
         "task_id": task.id,
@@ -126,7 +191,19 @@ def api_download_dxf():
 
     limit = limiter.current_limit
     remaining = limit.remaining
-    reset_at = limit.reset_at
+    reset_at = datetime.fromtimestamp(limit.reset_at)
+
+    # Spara task info i DB
+    tracker = TaskTracker(
+        user_email=email,
+        task_id=task.id,
+        rate_limit_remaining=remaining,
+        rate_limit_total=limit.limit.amount,
+        rate_limit_reset=reset_at,
+        bbox=bbox_str,
+    )
+    db.session.add(tracker)
+    db.session.commit()
 
     return jsonify({
         "task_id": task.id,
@@ -139,17 +216,18 @@ def api_download_dxf():
 
 
 def cleanup_temp_files():
-    """Rensar temporära filer som har gått ut"""
+    """Tömmer file_path, geojson och expires_at för trackers vars expires_at har passerats."""
     now = datetime.now()
-    expired_files = [task_id for task_id,
-                     info in TEMP_FILES.items() if info["expires_at"] < now]
+    expired_trackers = TaskTracker.query.filter(TaskTracker.expires_at < now).all()
 
-    for task_id in expired_files:
-        file_path = TEMP_FILES[task_id]["file_path"]
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        del TEMP_FILES[task_id]
+    tracker: TaskTracker
+    for tracker in expired_trackers:
+        if os.path.exists(tracker.file_path):
+            os.remove(tracker.file_path)
+        tracker.file_path = None
+        tracker.geojson = None
 
+    db.session.commit()
 
 @fastighetsindelning_bp.route('/task_status/<task_id>', methods=['GET'])
 def task_status(task_id):
@@ -159,9 +237,9 @@ def task_status(task_id):
     if task.state == 'PENDING':
         response = {"state": task.state, "status": "Task is pending..."}
     elif task.state == 'SUCCESS':
-        # Skapa en temporär fil för DXF-innehållet
-        if task_id not in TEMP_FILES:
-            # result = task.info
+        # Hämta task info från databasen och kontrollera om filen redan finns
+        tracker: TaskTracker = TaskTracker.query.filter_by(task_id=task_id).first()
+        if tracker and not tracker.file_path:
 
             # Skapa en temporär fil med mkstemp
             fd, temp_file_path = tempfile.mkstemp(
@@ -169,14 +247,17 @@ def task_status(task_id):
                 suffix=".dxf",
                 dir="/tmp"
             )
+            # Skapa en temporär fil för DXF-innehållet
             with os.fdopen(fd, 'wb') as temp_file:
                 temp_file.write(task.info["dxf"])
 
-            # Lägg till filen i TEMP_FILES med en utgångstid på 24 timmar
-            TEMP_FILES[task_id] = {
-                "file_path": temp_file_path,
-                "expires_at": datetime.now() + timedelta(hours=24)
-            }
+            # Uppdatera TaskTracker med filens sökväg
+            tracker: TaskTracker = TaskTracker.query.filter_by(task_id=task_id).first()
+            if tracker and not tracker.file_path:
+                tracker.file_path = temp_file_path
+                tracker.expires_at = datetime.now() + timedelta(hours=24)
+                tracker.geojson = json.dumps(task.info["geojson"])
+                db.session.commit()
 
         # Returnera filens URL
         file_url = url_for("fastighet.download_file", task_id=task_id)
@@ -197,12 +278,17 @@ def task_status(task_id):
 @fastighetsindelning_bp.route('/download_file/<task_id>', methods=['GET'])
 def download_file(task_id):
     """Returnerar filen för nedladdning baserat på task_id"""
-    if task_id not in TEMP_FILES:
+
+    cleanup_temp_files()
+
+    # Hämta task från databasen
+    tracker = TaskTracker.query.filter_by(task_id=task_id).first()
+
+    if not tracker:
+        return jsonify({"error": "Task not found"}), 404
+
+    if not tracker.file_path or not os.path.exists(tracker.file_path):
         return jsonify({"error": "File not found or expired"}), 404
 
-    file_path = TEMP_FILES[task_id]["file_path"]
-    if not os.path.exists(file_path):
-        return jsonify({"error": "File not found"}), 404
-
     # Returnera filen som en nedladdning
-    return send_file(file_path, as_attachment=True)
+    return send_file(tracker.file_path, as_attachment=True)

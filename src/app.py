@@ -54,6 +54,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 with app.app_context():
     # Skapa databasen och tabellerna om de inte redan finns
+    from db import TaskTracker  # noqa: F401
     db.create_all()
 migrate = Migrate(app, db)
 

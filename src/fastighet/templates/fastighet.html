@@ -20,6 +20,10 @@
 <div id="download-status" style="display: none;"></div>
 <a id="download-link" href="#" style="display: none;">Om nedladdning inte startar automatiskt klicka här för att
     starta!</a>
+<div class="container my-4" id="tracker-container" style="display: none;">
+    <h4 class="mb-3">Dina senaste filerna som går att ladda ned</h4>
+    <ul id="tracker-list" class="list-group"></ul>
+</div>
 <div id="rate-limit-info" style="margin-top: 10px; color: red;"></div>
 
 <p>
@@ -118,11 +122,12 @@
 
     let resetTimeoutId; // Global variabel för att lagra timeout-ID
     function rateLimitInfo(rate_limit) {
-        const remaining = rate_limit.remaining;
-        const limit = rate_limit.limit;
+        document.getElementById("rate-limit-info").innerText = "";
 
         let resetTime = "unknown";
-        if (rate_limit.reset && !isNaN(rate_limit.reset)) {
+        if (rate_limit && rate_limit.reset && !isNaN(rate_limit.reset)) {
+            const remaining = rate_limit.remaining;
+            const limit = rate_limit.limit;
             resetTime = new Date(rate_limit.reset * 1000).toLocaleTimeString();
 
             const resetDelay = (rate_limit.reset * 1000) - Date.now();
@@ -133,14 +138,15 @@
                 }
 
                 // Schemalägg en ny timeout
-                resetTimeoutId = setTimeout(() => {
-                    document.getElementById("rate-limit-info").innerText = "";
-                }, resetDelay);
+                resetTimeoutId = setTimeout(
+                    loadTaskTrackers,
+                    resetDelay
+                );
             }
+            document.getElementById("rate-limit-info").innerText =
+                `Du har ${remaining} av ${limit} nedladdningar kvar denna timme. Återställs kl. ${resetTime}.`;
         }
 
-        document.getElementById("rate-limit-info").innerText =
-            `Du har ${remaining} av ${limit} nedladdningar kvar denna timme. Återställs kl. ${resetTime}.`;
     }
 
     function pollTaskStatus(taskId) {
@@ -150,11 +156,16 @@
             .then(response => response.json())
             .then(data => {
                 if (data.state === 'SUCCESS') {
+                    loadTaskTrackers();
                     statusbox.innerHTML = "Nedladdning klar!";
 
                     // Lägg till geojson-lager på kartan
                     if (data.geojson) {
                         addGeoJSONToMap(data.geojson);
+                    }
+
+                    if (drawnBoundsLayer) {
+                        map.removeLayer(drawnBoundsLayer);
                     }
                     const downloadLink = document.getElementById("download-link");
                     downloadLink.href = data.file_url;
@@ -177,6 +188,90 @@
                     }, 1000);
                 }
             });
+    }
+
+    function fetchAndPollWorkingTasks() {
+        fetch("{{ url_for('fastighet.get_working_tasks') }}")
+            .then(response => response.json())
+            .then(data => {
+                if (data.tasks && data.tasks.length > 0) {
+                    data.tasks.forEach(taskId => {
+                        pollTaskStatus(taskId); // Anropa pollTaskStatus för varje task_id
+                    });
+                } else {
+                    console.log("Inga aktiva tasks hittades.");
+                }
+            })
+            .catch(error => console.error("Fel vid hämtning av aktiva tasks:", error));
+    }
+
+    // Kör funktionen när sidan har laddats
+    document.addEventListener("DOMContentLoaded", function () {
+        fetchAndPollWorkingTasks();
+    });
+</script>
+<script>
+    function loadTaskTrackers() {
+        fetch("{{ url_for('fastighet.get_trackers') }}")
+            .then(response => response.json())
+            .then(data => {
+                const trackerContainer = document.getElementById("tracker-container");
+                const trackerList = document.getElementById("tracker-list");
+
+                // Töm listan först (om du kör detta flera gånger)
+                trackerList.innerHTML = "";
+
+                // Töm det globala lagret för GeoJSON
+                clearGeoJsonLayer();
+
+                if (data.trackers.length > 0) {
+                    trackerContainer.style.display = "block";
+                }
+
+                data.trackers.forEach(tracker => {
+                    const listItem = document.createElement("li");
+                    listItem.className = "list-group-item";
+                    listItem.innerHTML =
+                        `
+                    <div class="d-none">
+                        <strong>Task ID:</strong> ${tracker.task_id} <br>
+                        <strong>Reset:</strong> ${new Date(tracker.reset * 1000).toLocaleString()} <br>
+                    </div>
+                    <p class="mb-1"><strong>Skapad:</strong> ${tracker.created_at}</p>
+                    <a href="#" onclick="zoomToBBox('${tracker.bbox}')" class="btn btn-sm btn-outline-primary me-2">Zooma in på</a>
+                    <a href="${tracker.download_url}" class="btn btn-sm btn-success">Ladda ned fil</a>
+                    `;
+                    trackerList.appendChild(listItem);
+
+                    // Lägg till GeoJSON-lager på kartan
+                    if (tracker.geojson) {
+                        addGeoJSONToLayer(tracker.geojson);
+                    }
+                });
+
+                // Hämta reset-tiden för den äldsta posten (första i listan)
+                rateLimitInfo(data.rate_info);
+            })
+            .catch(error => console.error("Error fetching trackers:", error));
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        loadTaskTrackers();
+    });
+
+    function zoomToBBox(bbox) {
+        // Dela upp bbox-strängen till koordinater
+        const [minX, minY, maxX, maxY] = bbox.split(',').map(coord => parseFloat(coord));
+
+        // Konvertera bbox från WGS84 (EPSG:4326) till Web Mercator (EPSG:3857)
+        const extent = ol.proj.transformExtent(
+            [minX, minY, maxX, maxY],
+            'EPSG:4326',
+            'EPSG:3857'
+        );
+
+        // Zooma in på kartan till bounding box
+        map.getView().fit(extent, { size: map.getSize(), padding: [20, 20, 20, 20] });
     }
 </script>
 <script>
@@ -239,6 +334,23 @@
         source: new ol.source.OSM()
     });
     map.addLayer(osmLayer);
+    // Globalt lager för GeoJSON-data
+    let geoJsonLayer = new ol.layer.Vector({
+        source: new ol.source.Vector(),
+        style: new ol.style.Style({
+            stroke: new ol.style.Stroke({
+                color: 'gray', // Ljusgrå linje
+                width: 2,
+                lineDash: [4, 4] // Streckad linje (4px streck, 4px mellanrum)
+            }),
+            fill: new ol.style.Fill({
+                color: 'rgba(211, 211, 211, 0.5)' // Ljusgrå genomskinlig fyllning
+            })
+        })
+    });
+
+    // Lägg till lagret på kartan
+    map.addLayer(geoJsonLayer);
 
     var drawnBoundsLayer;
 
@@ -308,11 +420,25 @@
 </script>
 
 <script>
+    // --==( LÄGG TILL GEOJSON PÅ KARTAN )==--
+    // Funktioner för att hantera GeoJSON-lager
+    function clearGeoJsonLayer() {
+        geoJsonLayer.getSource().clear();
+    }
+    function addGeoJSONToLayer(geojson) {
+        if (typeof geojson === 'string') {
+            geojson = JSON.parse(geojson);
+        }
+
+        const features = transformGeoJSON(geojson, 'EPSG:3006', 'EPSG:3857'); // Om GeoJSON är i SWEREF 99 TM
+        geoJsonLayer.getSource().addFeatures(features); // Lägg till funktioner i lagret
+    }
+
     function addGeoJSONToMap(geojson) {
         if (typeof geojson === 'string') {
             geojson = JSON.parse(geojson);
         }
-        geojson = flipCoordinates(geojson); // Om GeoJSON är i SWEREF 99 TM
+        // geojson = flipCoordinates(geojson); // Om GeoJSON är i SWEREF 99 TM
         const features = transformGeoJSON(geojson, 'EPSG:3006', 'EPSG:3857'); // Om GeoJSON är i SWEREF 99 TM
         const vectorSource = new ol.source.Vector({
             features: features
@@ -332,7 +458,7 @@
             })
         });
 
-        map.addLayer(vectorLayer);
+        //map.addLayer(vectorLayer);
         map.getView().fit(vectorSource.getExtent(), {
             size: map.getSize(),
             padding: [20, 20, 20, 20],

@@ -24,6 +24,28 @@ def create_dxf(data):
     dxf_stream.seek(0)
     return dxf_stream.getvalue()
 
+def flip_coordinates(geojson_features):
+    def flip_coords(coords):
+        # Hantera olika typer av koordinatstrukturer
+        return [[ [x, y] for y, x in ring ] for ring in coords]
+
+    flipped_features = []
+    for feature in geojson_features:
+        geom_type = feature.get('geometry', {}).get('type')
+        coords = feature.get('geometry', {}).get('coordinates')
+
+        if geom_type == 'Polygon' and coords:
+            feature['geometry']['coordinates'] = flip_coords(coords)
+        elif geom_type == 'MultiPolygon' and coords:
+            feature['geometry']['coordinates'] = [
+                flip_coords(polygon) for polygon in coords
+            ]
+        # Lägg till fler typer om det behövs
+
+        flipped_features.append(feature)
+
+    return flipped_features
+
 
 # @celery.task(bind=True, name="fastighet.routes.download_and_create_dxf")
 def download_and_create_dxf(self, bbox):
@@ -34,7 +56,7 @@ def download_and_create_dxf(self, bbox):
 
     geojson_data = {
         "type": "FeatureCollection",
-        "features": data
+        "features": flip_coordinates(data)
     }
 
     return {
