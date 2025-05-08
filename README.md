@@ -57,8 +57,7 @@ services:
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-    command: >
-      celery -A src.tasks.celery worker
+    command: ["./entrypoint.sh", "celery"]
 
   redis:
     image: redis:latest
