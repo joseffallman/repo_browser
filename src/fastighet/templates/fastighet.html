@@ -16,15 +16,13 @@
 
 <button type="button" class="btn btn-primary" id="downloadBtn" onclick="startDownload()" disabled>Ladda ner DXF</button>
 
-<!-- Länk för nedladdning -->
+<div id="rate-limit-info" class="font-weight-light text-secondary"></div>
 <div id="download-status" style="display: none;"></div>
-<a id="download-link" href="#" style="display: none;">Om nedladdning inte startar automatiskt klicka här för att
-    starta!</a>
 <div class="container my-4" id="tracker-container" style="display: none;">
     <h4 class="mb-3">Dina senaste filerna som går att ladda ned</h4>
     <ul id="tracker-list" class="list-group"></ul>
 </div>
-<div id="rate-limit-info" style="margin-top: 10px; color: red;"></div>
+
 
 <p>
     <a href="{{ url_for('repos') }}">Tillbaka till listan över projekt</a>
@@ -110,7 +108,7 @@
             .then(data => {
                 if (data.task_id) {
                     pollTaskStatus(data.task_id);
-                    statusbox.innerHTML = "Nedladdning av data från fastighetsregistret pågår. Stanna kvar på sidan tills klar.";
+                    statusbox.innerHTML = "Nedladdning av data från fastighetsregistret pågår.";
                 } else {
                     statusbox.innerHTML = "Ett fel inträffade: " + data.error;
                 }
@@ -167,9 +165,6 @@
                     if (drawnBoundsLayer) {
                         map.removeLayer(drawnBoundsLayer);
                     }
-                    const downloadLink = document.getElementById("download-link");
-                    downloadLink.href = data.file_url;
-                    downloadLink.style.display = "block";
 
                     // Skapa en dynamisk <a>-tagg för att starta nedladdningen
                     const startDownloadLink = document.createElement('a');
@@ -239,7 +234,7 @@
                     </div>
                     <p class="mb-1"><strong>Skapad:</strong> ${tracker.created_at}</p>
                     <a href="#" onclick="zoomToBBox('${tracker.bbox}')" class="btn btn-sm btn-outline-primary me-2">Zooma in på</a>
-                    <a href="${tracker.download_url}" class="btn btn-sm btn-success">Ladda ned fil</a>
+                    <a href="${tracker.download_url}" class="btn btn-sm btn-success ${tracker.file_path ? '' : 'disabled'}">Ladda ned fil</a>
                     `;
                     trackerList.appendChild(listItem);
 

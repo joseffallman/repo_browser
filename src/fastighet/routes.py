@@ -81,6 +81,7 @@ def get_trackers():
             "reset": int(t.rate_limit_reset.timestamp()),
             "bbox": t.bbox,
             "geojson": t.geojson,
+            "file_path": t.file_path,
             "download_url": url_for("fastighet.download_file", task_id=t.task_id)
         }
         for t in trackers
