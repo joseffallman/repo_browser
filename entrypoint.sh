@@ -4,7 +4,7 @@ set -e
 # Kontrollera första argumentet och starta rätt process
 if [ "$1" = "celery" ]; then
     echo "Starting Celery worker..."
-    exec celery -A src.tasks.celery worker
+    exec celery -A src.tasks worker
 else
     # Kör DB-migreringar
     cd /app/src
