@@ -120,7 +120,7 @@ def download_dxf():
     try:
         cleanup_temp_files()
     except Exception as e:
-        print("Unable to clean temp files" + e)
+        print("Unable to clean temp files", e)
 
     # Starta Celery-task
     task = celery.send_task(
@@ -223,7 +223,7 @@ def cleanup_temp_files():
 
     tracker: TaskTracker
     for tracker in expired_trackers:
-        if os.path.exists(tracker.file_path):
+        if tracker.file_path and os.path.exists(tracker.file_path):
             os.remove(tracker.file_path)
         tracker.file_path = None
         tracker.geojson = None

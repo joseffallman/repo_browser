@@ -49,7 +49,7 @@ def fetch_repo_contents(self, owner, repo_name, path, token):
     return contents
 
 
-@celery.task(bind=True)
+@celery.task(bind=True, name="tasks.edit_file_task")
 def edit_file_task(self, repo_name, path, newPath, owner, newContent, action, projCRS, oauth_token):
     updated_files = []
     gitea = OAuth2Session(client_id, token=oauth_token)
