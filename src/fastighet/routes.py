@@ -153,7 +153,7 @@ def download_dxf():
     }), 202
 
 
-@fastighetsindelning_bp.route('/api/download', methods=['POST'])
+@fastighetsindelning_bp.route('/api/download', methods=['POST', 'GET'])
 @limiter.limit("5 per hour", key_func=get_remote_address)
 def api_download_dxf():
     auth_header = request.headers.get("Authorization")
@@ -169,7 +169,10 @@ def api_download_dxf():
     if not validate_license_and_email(license_key, email):
         return jsonify({"error": "Invalid license or email"}), 401
 
-    bbox_str = request.json.get("bbox")
+    if request.method == "POST":
+        bbox_str = request.json.get("bbox")
+    else:  # GET
+        bbox_str = request.args.get("bbox")
     if not bbox_str:
         return jsonify({"error": "Bounding box (bbox) parameter is required"}), 400
 

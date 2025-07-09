@@ -41,3 +41,29 @@ def test_api_download_success(mock_send_task, mock_validate, client):
     # Kontrollera att celery-mocken anropades med rätt bbox
     mock_send_task.assert_called_once_with(
         "fastighet.routes.download_and_create_dxf", args=[bbox])
+
+@patch("fastighet.routes.validate_license_and_email")
+@patch("fastighet.routes.celery.send_task")
+def test_api_download_success_get(mock_send_task, mock_validate, client):
+    # Setup mockar
+    mock_validate.return_value = True
+    mock_send_task.return_value.id = "mock-task-id"
+
+    # Setup testdata
+    bbox = "12.0,55.0,12.01,55.001"
+    headers = {
+        "Authorization": "Bearer VALID_API_KEY_12345|test@example.com"
+    }
+    response = client.get(
+        "fastighet/api/download", query_string={"bbox": bbox}, headers=headers
+    )
+
+    assert_successful_response(response, 202)
+    data = response.get_json()
+    assert "task_id" in data
+    assert data["task_id"] == "mock-task-id"
+
+    # Kontrollera att celery-mocken anropades med rätt bbox
+    mock_send_task.assert_called_once_with(
+        "fastighet.routes.download_and_create_dxf", args=[bbox]
+    )
