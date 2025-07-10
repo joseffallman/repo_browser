@@ -39,6 +39,19 @@ def get_user_key():
     # Fallback till IP om "user" saknas
     return session.get("user", {}).get("id", get_remote_address())
 
+def get_user_email() -> str:
+    """Return User email from Authorization-headern, fallback to IP."""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        return get_remote_address()
+
+    try:
+        token_type, credentials = auth_header.split(" ")
+        license_key, email = credentials.split("|")
+    except ValueError:
+        return get_remote_address()
+
+    return email
 
 # Skapa en Limiter-instans
 limiter = Limiter(
@@ -154,7 +167,7 @@ def download_dxf():
 
 
 @fastighetsindelning_bp.route('/api/download', methods=['POST', 'GET'])
-@limiter.limit("5 per hour", key_func=get_remote_address)
+@limiter.limit("5 per hour", key_func=get_user_email, deduct_when=lambda r: r.status_code != 202)
 def api_download_dxf():
     auth_header = request.headers.get("Authorization")
     if not auth_header:
