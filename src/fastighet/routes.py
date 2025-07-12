@@ -167,7 +167,7 @@ def download_dxf():
 
 
 @fastighetsindelning_bp.route('/api/download', methods=['POST', 'GET'])
-@limiter.limit("5 per hour", key_func=get_user_email, deduct_when=lambda r: r.status_code != 202)
+@limiter.limit("5 per hour", key_func=get_user_email, deduct_when=lambda r: r.status_code == 202)
 def api_download_dxf():
     auth_header = request.headers.get("Authorization")
     if not auth_header:
