@@ -42,6 +42,7 @@ def test_api_download_success(mock_send_task, mock_validate, client):
     mock_send_task.assert_called_once_with(
         "fastighet.routes.download_and_create_dxf", args=[bbox])
 
+
 @patch("fastighet.routes.validate_license_and_email")
 @patch("fastighet.routes.celery.send_task")
 def test_api_download_success_get(mock_send_task, mock_validate, client):
