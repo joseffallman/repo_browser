@@ -1,13 +1,15 @@
-import math
+from pyproj import Transformer
+
+transformer = Transformer.from_crs("EPSG:4326", "EPSG:3006", always_xy=True)
 
 
-def degrees_to_meters(minx, miny, maxx, maxy):
-    """Convert a bounding box defined by its minimum and maximum coordinates"""
-    meters_per_deg_lat = 111320
-    avg_lat = (miny + maxy) / 2.0
-    meters_per_deg_lng = 40075000 * math.cos(math.radians(avg_lat)) / 360
+def degrees_to_meters(minx, miny, maxx, maxy) -> tuple(int, int):
+    """ Konverterar bbox-koordinater från grader till meter i EPSG:3006 """
+    # Transformera koordinaterna till EPSG:3006
+    x1, y1 = transformer.transform(minx, miny)
+    x2, y2 = transformer.transform(maxx, maxy)
 
-    width_deg = abs(maxx - minx)
-    height_deg = abs(maxy - miny)
+    width_m = abs(x2 - x1)
+    height_m = abs(y2 - y1)
 
-    return width_deg * meters_per_deg_lng, height_deg * meters_per_deg_lat
+    return width_m, height_m

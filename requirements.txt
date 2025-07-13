@@ -8,3 +8,4 @@ ezdxf
 flask_limiter
 flask_sqlalchemy
 flask_migrate
+pyproj

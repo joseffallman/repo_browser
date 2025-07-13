@@ -18,9 +18,9 @@ from flask_limiter.util import get_remote_address
 from config import (
     login_required,
 )
+from db import TaskTracker, db
 from jocoding import validate_license_and_email
 from tasks import celery
-from db import db, TaskTracker
 
 from .bbox import degrees_to_meters
 
@@ -39,6 +39,7 @@ def get_user_key():
     # Fallback till IP om "user" saknas
     return session.get("user", {}).get("id", get_remote_address())
 
+
 def get_user_email() -> str:
     """Return User email from Authorization-headern, fallback to IP."""
     auth_header = request.headers.get("Authorization")
@@ -52,6 +53,7 @@ def get_user_email() -> str:
         return get_remote_address()
 
     return email
+
 
 # Skapa en Limiter-instans
 limiter = Limiter(
@@ -76,7 +78,7 @@ def get_trackers():
         TaskTracker.rate_limit_reset >= datetime.now()
     ).order_by(TaskTracker.created_at.asc()).all()
 
-    tracker:TaskTracker = trackers[0] if trackers else None
+    tracker: TaskTracker = trackers[0] if trackers else None
     if tracker:
         rate_info = {
             "remaining": tracker.rate_limit_remaining,
@@ -111,7 +113,7 @@ def get_working_tasks():
         TaskTracker.user_email == session["user"]['email'],
         TaskTracker.expires_at == None,
         TaskTracker.file_path == None,
-        ).all()
+    ).all()
 
     if not trackers:
         return jsonify({"tasks": []}), 200
@@ -169,6 +171,10 @@ def download_dxf():
 @fastighetsindelning_bp.route('/api/download', methods=['POST', 'GET'])
 @limiter.limit("5 per hour", key_func=get_user_email, deduct_when=lambda r: r.status_code == 202)
 def api_download_dxf():
+    """API-endpoint för att hämta DXF-data baserat på bbox.
+    Använder Authorization-headern för att validera licens och e-post.
+    bbox-format: "minx,miny,maxx,maxy" i grader i EPSG:4326"""
+
     auth_header = request.headers.get("Authorization")
     if not auth_header:
         return jsonify({"error": "Missing Authorization header"}), 401
@@ -235,7 +241,8 @@ def api_download_dxf():
 def cleanup_temp_files():
     """Tömmer file_path, geojson och expires_at för trackers vars expires_at har passerats."""
     now = datetime.now()
-    expired_trackers = TaskTracker.query.filter(TaskTracker.expires_at < now).all()
+    expired_trackers = TaskTracker.query.filter(
+        TaskTracker.expires_at < now).all()
 
     tracker: TaskTracker
     for tracker in expired_trackers:
@@ -246,6 +253,7 @@ def cleanup_temp_files():
 
     db.session.commit()
 
+
 @fastighetsindelning_bp.route('/task_status/<task_id>', methods=['GET'])
 def task_status(task_id):
     """Kontrollerar status för en Celery-task och hanterar temporära filer"""
@@ -255,7 +263,8 @@ def task_status(task_id):
         response = {"state": task.state, "status": "Task is pending..."}
     elif task.state == 'SUCCESS':
         # Hämta task info från databasen och kontrollera om filen redan finns
-        tracker: TaskTracker = TaskTracker.query.filter_by(task_id=task_id).first()
+        tracker: TaskTracker = TaskTracker.query.filter_by(
+            task_id=task_id).first()
         if tracker and not tracker.file_path:
 
             # Skapa en temporär fil med mkstemp
@@ -269,7 +278,8 @@ def task_status(task_id):
                 temp_file.write(task.info["dxf"])
 
             # Uppdatera TaskTracker med filens sökväg
-            tracker: TaskTracker = TaskTracker.query.filter_by(task_id=task_id).first()
+            tracker: TaskTracker = TaskTracker.query.filter_by(
+                task_id=task_id).first()
             if tracker and not tracker.file_path:
                 tracker.file_path = temp_file_path
                 tracker.expires_at = datetime.now() + timedelta(hours=24)
