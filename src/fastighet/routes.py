@@ -202,7 +202,7 @@ def api_download_dxf():
 
     width_m, height_m = degrees_to_meters(minx, miny, maxx, maxy)
     if width_m > MAX_METERS or height_m > MAX_METERS:
-        return jsonify({"error": "Bounding box exceeds 1000x1000 meter limit"}), 400
+        return jsonify({"error": f"Bounding box with {width_m}x{height_m} exceeds 1000x1000 meter limit"}), 400
 
     try:
         cleanup_temp_files()
