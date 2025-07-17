@@ -1557,6 +1557,7 @@
         function makeEditable(element) {
             const originalText = element.textContent;
             const input = document.createElement('input');
+            sanitizeAsciiInput(input, 32);
             input.type = 'text';
             input.value = originalText;
             input.classList.add('editing');
@@ -1770,5 +1771,55 @@
                 loadingSpinner(false);
             });
     };
+</script>
+
+<script>
+    function sanitizeAsciiInput(inputElement, maxLength = null, removeSpaces = false) {
+        inputElement.addEventListener('input', () => {
+            const originalValue = inputElement.value;
+            const originalSelectionStart = inputElement.selectionStart;
+
+            let value = originalValue;
+
+            // 1. Ersätt Å, Ä, Ö med A/O
+            value = value
+                .replace(/Å/g, 'A').replace(/Ä/g, 'A').replace(/Ö/g, 'O')
+                .replace(/å/g, 'a').replace(/ä/g, 'a').replace(/ö/g, 'o');
+
+            // 2. Normalisera och ta bort diakritiska tecken
+            value = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+            // 3. Ta bort icke-ASCII-tecken
+            value = value.replace(/[^\x00-\x7F]/g, '');
+
+            // 4. Ta bort mellanslag om önskat
+            if (removeSpaces) {
+                value = value.replace(/\s+/g, '');
+            }
+
+            // 5. Trim till maxLength om angivet
+            if (typeof maxLength === 'number' && value.length > maxLength) {
+                value = value.substring(0, maxLength);
+            }
+
+            // 6. Om något har ändrats – uppdatera och återställ markör
+            if (value !== originalValue) {
+                // Försök beräkna ny position (justera vid tecken som tagits bort)
+                const diff = originalValue.length - value.length;
+                const newPosition = Math.max(0, originalSelectionStart - diff);
+
+                // Uppdatera värdet utan att förlora fokus
+                inputElement.value = value;
+
+                // Återställ markören
+                inputElement.setSelectionRange(newPosition, newPosition);
+            }
+        });
+    }
+
+
+    sanitizeAsciiInput(document.getElementById('folderName'));  // Skapa ny mapp namn
+    sanitizeAsciiInput(document.getElementById('newDes'), 32);  // Beskrivning av punktkod
+    sanitizeAsciiInput(document.getElementById('saveAsInput'));  // Spara punkter som namn
 </script>
 {% endblock %}
