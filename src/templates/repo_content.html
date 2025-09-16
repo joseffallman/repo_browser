@@ -1716,7 +1716,7 @@
         });
     });
 
-    function load_tree_content(url) {
+    function load_tree_content(url, updateHistory = true) {
         const treeContainer = document.querySelector('.tree');
 
         // Visa laddar-symbolen
@@ -1731,6 +1731,10 @@
             .then(html => {
                 // Uppdatera innehållet
                 treeContainer.innerHTML = html;
+                // Uppdatera URL:en i adressfältet
+                if (updateHistory) {
+                    history.pushState({ url: url }, '', url);
+                }
             })
             .catch(error => console.error('Error:', error))
             .finally(() => {
@@ -1738,6 +1742,13 @@
                 loadingSpinner(false);
             });
     };
+
+    // Lyssna på bakåt/framåt-knappar
+    window.addEventListener('popstate', function (event) {
+        if (event.state && event.state.url) {
+            load_tree_content(event.state.url, false); // Ladda utan att pusha ny historik
+        }
+    });
 </script>
 
 <script>
