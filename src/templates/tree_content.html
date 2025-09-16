@@ -2,7 +2,8 @@
 <div class="card">
     <div class="card-body">
         <span>Denna mapp innehåller följande projekt:</span>
-        <form action="{{ url_for('export_projekt', owner=owner, repo_name=repo_name) }}" method="post" id="editProject">
+        <form action="{{ url_for('export_projekt', owner=owner, repo_name=repo_name, path=path) }}" method="post"
+            id="editProject">
             <select name="project" id="project" class="form-select form-select-lg mb-3">
                 {% for project in projects %}
                 <option value='{{project | tojson }}'>{{project.name}}</option>

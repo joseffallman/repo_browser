@@ -26,9 +26,9 @@ from config import (
     build_version,
     client_id,
     client_secret,
+    login_required,
     token_url,
 )
-from config import login_required
 from crd_reader import crd_to_json
 from crs_systems import crs_list
 from db import db
@@ -616,9 +616,9 @@ def edit_file(repo_name):
     return jsonify({"task_id": task.id}), 202
 
 
-@app.route("/repo/<owner>/<repo_name>/export_projekt", methods=["POST"])
+@app.route("/repo/<owner>/<repo_name>/export_projekt/<path:path>", methods=["POST"])
 @login_required
-def export_projekt(repo_name, owner):
+def export_projekt(repo_name, owner, path):
     """Ändra projektfil som kör export action i git repot."""
     project = request.form.get("project", "")
     defaultCRS = request.form.get("defaultCRS").lower()
@@ -626,7 +626,12 @@ def export_projekt(repo_name, owner):
     settingsFilePath = request.form.get("settingsFilePath")
 
     if not project or not exportCRS:
-        return jsonify({"error": "Felaktiga parametrar, avbryter."}), 400
+        flash("Felaktiga parametrar, avbryter", "warning")
+        return redirect(
+            url_for(
+                "repo_content", owner=owner, repo_name=repo_name, path=path
+            )
+        )
 
     project = json.loads(project)
     path = project["path"]

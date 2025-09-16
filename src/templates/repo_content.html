@@ -1661,39 +1661,6 @@
 
     };
 
-
-    function exportProject(filePath) {
-
-        // Show loading spinner.
-        loadingSpinner(true);
-        defaultCRS = document.getElementById("editProject").elements["defaultCRS"].value;
-        exportCRS = document.getElementById("editProject").elements["exportCRS"].value;
-
-        fetch(`{{ url_for('export_projekt', repo_name=repo_name, owner=owner) }}`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    path: filePath,
-                    defaultCRS: defaultCRS,
-                    exportCRS: exportCRS
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                const newFileContent = data.content.concat(" ");// Bygg upp den data som ska skickas till servern
-                const form = document.getElementById('editFileForm');
-                document.getElementById('editFileContent').value = newFileContent;
-                document.getElementById('editFilePath').value = newFilePath;
-                form.submit();
-            })
-            .finally(() => {
-                loadingSpinner(false);
-            });
-    }
-
     document.querySelector('.tree').addEventListener('click', function (event) {
         if (event.target.classList.contains('edit-file-link')) {
             event.preventDefault();
@@ -1715,7 +1682,7 @@
 
     // Export project button
     document.addEventListener('submit', function (event) {
-        if (event.target && event.target.id === 'exportProject') {
+        if (event.target && event.target.id === 'editProject') {
             loadingSpinner(true);
         }
     });
