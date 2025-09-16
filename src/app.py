@@ -842,5 +842,36 @@ def search(
     return result
 
 
+@app.route("/repo/<owner>/<repo_name>/actions/running", methods=["GET"])
+@login_required
+def running_actions(owner, repo_name):
+    try:
+        before_request()
+        gitea = OAuth2Session(client_id, token=session["oauth_token"])
+
+        # Be Gitea endast returnera pågående workflows
+        resp = gitea.get(
+            f"{api_base_url}/repos/{owner}/{repo_name}/actions/tasks",
+            params={"page": 1, "limit": 5},
+        )
+        resp.raise_for_status()
+        runs = resp.json().get("workflow_runs", [])
+
+        running = [
+            {
+                "id": run["id"],
+                "name": run.get("display_title"),
+                "status": run.get("status"),
+                "created_at": run.get("created_at")
+            }
+            for run in runs
+            if run.get("status") in ["running", "in_progress", "queued"]
+        ]
+
+        return jsonify(running)
+    except Exception as e:
+        return jsonify({"error": f"Fel: {e}"}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True)

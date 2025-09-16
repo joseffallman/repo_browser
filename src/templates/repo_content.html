@@ -1844,4 +1844,53 @@
     sanitizeAsciiInput(document.getElementById('newDes'), 32);  // Beskrivning av punktkod
     sanitizeAsciiInput(document.getElementById('saveAsInput'));  // Spara punkter som namn
 </script>
+
+<script>
+    let currentActionAlert = null;
+    let actionsStatusTimer = null;
+
+    function pollActionsStatus() {
+        fetch("{{ url_for('running_actions', owner=owner, repo_name=repo_name) }}")
+            .then(response => response.json())
+            .then(data => {
+                // Stäng tidigare alert om den finns
+                if (currentActionAlert && typeof currentActionAlert.remove === 'function') {
+                    currentActionAlert.remove();
+                    currentActionAlert = null;
+                }
+                if (Array.isArray(data) && data.length > 0) {
+                    // Visa status för första pågående action
+                    const action = data[0];
+                    let msg = `Konverterar "${action.name}". Arbetet startades ${action.created_at}.`;
+                    currentActionAlert = showTaskStatus(msg, "info", 0);
+                }
+            })
+            .catch(error => {
+                if (currentActionAlert && typeof currentActionAlert.remove === 'function') {
+                    currentActionAlert.remove();
+                    currentActionAlert = null;
+                }
+                console.log('Error fetching actions status:', error);
+                // currentActionAlert = showTaskStatus("Kunde inte hämta action-status.", "danger", 3000);
+            })
+            .finally(() => {
+                // Starta ny timer
+                actionsStatusTimer = setTimeout(() => pollActionsStatus(), 1000);
+            });
+    }
+
+
+    // Avbryt polling
+    function stopActionsStatusPolling() {
+        if (actionsStatusTimer) {
+            clearTimeout(actionsStatusTimer);
+            actionsStatusTimer = null;
+        }
+    }
+
+    // Starta polling när sidan laddas
+    document.addEventListener("DOMContentLoaded", function () {
+        pollActionsStatus();
+    });
+</script>
 {% endblock %}
