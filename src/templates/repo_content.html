@@ -1424,31 +1424,75 @@
     });
 
 
-    function checkTaskStatus(taskId) {
+    function checkTaskStatus(taskId, prevAlert = null) {
         fetch(`/api/status/${taskId}`)
             .then(response => response.json())
             .then(data => {
                 if (data.state === 'SUCCESS') {
+                    closePrevAlert(prevAlert);
                     showTaskStatus(data.message || "Operation done successfully.", "success");
                 } else if (data.state === 'FAILURE') {
+                    closePrevAlert(prevAlert);
                     showTaskStatus(data.message || "Failed to perform the operation: " + data.status, "danger");
                 } else {
-                    setTimeout(() => checkTaskStatus(taskId), 1000);
+                    setTimeout(() => checkTaskStatus(taskId, prevAlert), 1000);
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
+                closePrevAlert(prevAlert);
                 showTaskStatus("An error occurred while checking the task status.", "danger");
             });
     }
+    function closePrevAlert(prevAlert) {
+        // Close previous alert if exists
+        if (prevAlert && typeof prevAlert.remove === 'function') {
+            prevAlert.remove();
+        }
+    }
 
-    function showTaskStatus(message, category = "info") {
+    function showTaskStatus(message, category = "info", timeout = 5000) {
         const taskStatusDiv = document.getElementById('task-status');
-        const taskStatusAlert = document.getElementById('task-status-alert');
-        const taskStatusMessage = document.getElementById('task-status-message');
-        taskStatusMessage.textContent = message;
-        taskStatusAlert.className = `alert alert-${category} alert-dismissible fade show`;
         taskStatusDiv.style.display = 'block';
+
+        // Skapa en unik alert
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${category} alert-dismissible fade show mt-2`;
+        alertDiv.setAttribute('role', 'alert');
+
+        // Meddelandetext
+        const messageSpan = document.createElement('span');
+        messageSpan.textContent = message;
+        alertDiv.appendChild(messageSpan);
+
+        // Stäng-knapp
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'btn-close';
+        closeBtn.setAttribute('data-bs-dismiss', 'alert');
+        closeBtn.setAttribute('aria-label', 'Close');
+        closeBtn.onclick = () => {
+            alertDiv.remove();
+            if (taskStatusDiv.childElementCount === 0) {
+                taskStatusDiv.style.display = 'none';
+            }
+        };
+        alertDiv.appendChild(closeBtn);
+
+        // Lägg till alerten i containern
+        taskStatusDiv.appendChild(alertDiv);
+
+        // Automatisk borttagning (om timeout > 0)
+        if (timeout > 0) {
+            setTimeout(() => {
+                alertDiv.remove();
+                if (taskStatusDiv.childElementCount === 0) {
+                    taskStatusDiv.style.display = 'none';
+                }
+            }, timeout);
+        }
+
+        return alertDiv; // Returnera referensen till meddelandet
     }
 
     // Användaren har bekräftat, så nu kan vi skicka formuläret
@@ -1509,9 +1553,9 @@
             .then(data => {
                 loadingSpinner(false);
                 if (data.task_id) {
-                    showTaskStatus("Worker is in progress...", "success");
+                    let oldAlert = showTaskStatus("Worker is in progress...", "success");
                     //checkTaskStatus(data.task_id);
-                    setTimeout(() => checkTaskStatus(data.task_id), 1000);
+                    setTimeout(() => checkTaskStatus(data.task_id, oldAlert), 1000);
                 } else {
                     showTaskStatus("Failed to start the task.", "danger");
                 }
