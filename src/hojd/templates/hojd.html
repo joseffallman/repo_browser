@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v10.2.1/ol.css">
+{% endblock %}
+
+{% block title %}Markhöjdmodell (STAC) Nedladdning{% endblock %}
+{% block body %}
+
+<h5>Välj ett område för markhöjdmodell</h5>
+<p>Klicka på kartan för att välja ett område (max 1000x1000 m). Du kan max ladda ned 5 områden på en timme.</p>
+<p>Informationen hämtas via Lantmäteriets STAC-hojd API (Markhöjdmodell) och paketeras som ZIP med asset-filer och GeoJSON.</p>
+<div id="map" style="width: 100%; height: 500px; margin:10px 0px"></div>
+
+<button type="button" class="btn btn-primary" id="downloadBtn" onclick="startDownload()" disabled>Ladda ner Markhöjdmodell (ZIP)</button>
+
+<div id="rate-limit-info" class="font-weight-light text-secondary"></div>
+<div id="download-status" style="display: none;"></div>
+<div class="container my-4" id="tracker-container" style="display: none;">
+    <h4 class="mb-3">Dina senaste höjdmodell-nedladdningar</h4>
+    <ul id="tracker-list" class="list-group"></ul>
+</div>
+
+<p>
+    <a href="{{ url_for('repos') }}">Tillbaka till listan över projekt</a>
+</p>
+
+<div class="text-center">
+    <a href="{{ url_for('logout') }}" class="btn btn-primary btn-lg">
+        <i class="bi bi-door-open-fill"></i> Logga ut.
+    </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/ol@v10.2.1/dist/ol.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.12.1/proj4.js"></script>
+
+<script>
+    proj4.defs("EPSG:3006", "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
+    ol.proj.proj4.register(proj4);
+
+    const map = new ol.Map({
+        target: 'map',
+        layers: [new ol.layer.Tile({ source: new ol.source.OSM() })],
+        view: new ol.View({
+            projection: 'EPSG:3857',
+            center: ol.proj.fromLonLat([17.6389, 59.8586]),
+            zoom: 15,
+            maxZoom: 30,
+        }),
+    });
+
+    let drawInteraction;
+    let drawnLayer = new ol.layer.Vector({
+        source: new ol.source.Vector(),
+    });
+
+    map.addLayer(drawnLayer);
+
+    function addDrawInteraction() {
+        drawInteraction = new ol.interaction.Draw({
+            source: drawnLayer.getSource(),
+            type: 'Polygon',
+        });
+
+        drawInteraction.on('drawend', function (event) {
+            document.getElementById('downloadBtn').disabled = false;
+            if (drawnLayer && drawnLayer.getSource().getFeatures().length > 1) {
+                drawnLayer.getSource().removeFeature(drawnLayer.getSource().getFeatures()[0]);
+            }
+        });
+
+        map.addInteraction(drawInteraction);
+    }
+
+    addDrawInteraction();
+
+    function startDownload() {
+        const features = drawnLayer.getSource().getFeatures();
+        if (features.length === 0) {
+            alert('Vänligen välj ett område först.');
+            return;
+        }
+
+        const extent = features[0].getGeometry().getExtent();
+        const [minX, minY, maxX, maxY] = ol.proj.transformExtent(extent, 'EPSG:3857', 'EPSG:4326');
+        const bbox = `${minX},${minY},${maxX},${maxY}`;
+
+        document.getElementById('downloadBtn').disabled = true;
+        const statusbox = document.getElementById('download-status');
+        statusbox.style.display = 'block';
+        statusbox.innerText = 'Startar nedladdning...';
+
+        fetch("{{ url_for('hojd.download_hojd') }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bbox: bbox }),
+        })
+            .then((res) => {
+                if (res.status === 429) {
+                    statusbox.innerText = 'För många begärningar. Försök igen senare.';
+                    throw new Error('Rate limit exceeded');
+                }
+                return res.json();
+            })
+            .then((data) => {
+                if (data.task_id) {
+                    pollTaskStatus(data.task_id);
+                    statusbox.innerText = 'Hämtar markhöjdmodell...';
+                } else {
+                    statusbox.innerText = 'Fel: ' + (data.error || 'Okänt fel');
+                }
+                if (data.rate_limit) {
+                    rateLimitInfo(data.rate_limit);
+                }
+            });
+    }
+
+    let resetTimeoutId;
+
+    function rateLimitInfo(rate_limit) {
+        const info = document.getElementById('rate-limit-info');
+        info.innerText = '';
+
+        if (!rate_limit || !rate_limit.reset) return;
+
+        const remaining = rate_limit.remaining;
+        const limit = rate_limit.limit;
+        const resetTime = new Date(rate_limit.reset * 1000).toLocaleTimeString();
+        info.innerText = `Du har ${remaining} av ${limit} nedladdningar kvar. Återställs kl. ${resetTime}.`;
+
+        const resetDelay = rate_limit.reset * 1000 - Date.now();
+        if (resetDelay > 0) {
+            if (resetTimeoutId) clearTimeout(resetTimeoutId);
+            resetTimeoutId = setTimeout(loadTaskTrackers, resetDelay);
+        }
+    }
+
+    function pollTaskStatus(taskId) {
+        const statusbox = document.getElementById('download-status');
+        fetch(`{{ url_for('hojd.task_status', task_id='') }}${taskId}`)
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.state === 'SUCCESS') {
+                    statusbox.innerText = 'Klar!';
+                    loadTaskTrackers();
+
+                    if (data.geojson) {
+                        console.log('GeoJSON received (can visualisera i QGIS genom path).', data.geojson);
+                    }
+
+                    const link = document.createElement('a');
+                    link.href = data.file_url;
+                    link.download = 'markhojdmodell.zip';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } else if (data.state === 'FAILURE') {
+                    statusbox.innerText = 'Fel: ' + data.status;
+                } else {
+                    statusbox.innerText = 'Laddar...';
+                    setTimeout(() => pollTaskStatus(taskId), 1500);
+                }
+            });
+    }
+
+    function loadTaskTrackers() {
+        fetch("{{ url_for('hojd.get_trackers') }}")
+            .then((res) => res.json())
+            .then((data) => {
+                const trackerList = document.getElementById('tracker-list');
+                trackerList.innerHTML = '';
+
+                if (data.trackers.length > 0) {
+                    document.getElementById('tracker-container').style.display = 'block';
+                }
+
+                data.trackers.forEach((tracker) => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item';
+                    li.innerHTML = `
+                        <p><strong>Skapad:</strong> ${tracker.created_at}</p>
+                        <a href="#" onclick="zoomToBBox('${tracker.bbox}')" class="btn btn-sm btn-outline-primary me-2">Zooma</a>
+                        <a href="${tracker.download_url}" class="btn btn-sm btn-success ${tracker.file_path ? '' : 'disabled'}">Ladda ned ZIP</a>
+                    `;
+                    trackerList.appendChild(li);
+                });
+
+                rateLimitInfo(data.rate_info);
+            });
+    }
+
+    function zoomToBBox(bbox) {
+        const coords = bbox.split(',').map(Number);
+        const extent = ol.proj.transformExtent(coords, 'EPSG:4326', 'EPSG:3857');
+        map.getView().fit(extent, { size: map.getSize(), padding: [20, 20, 20, 20] });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadTaskTrackers();
+    });
+</script>
+{% endblock %}

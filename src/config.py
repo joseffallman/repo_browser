@@ -33,6 +33,9 @@ celery_result_backend = os.getenv(
     "redis://redis:6379/0"
 )
 
+# STAC API scope (default can överridas med env)
+LM_stac_scope = os.getenv("LM_stac_scope", "ogc-features:fastighetsindelning.read")
+
 # Build enviroments
 build_date = os.getenv("BUILD_DATE", time.strftime("%Y-%m-%d"))
 build_version = os.getenv("BUILD_VERSION", "Develop")

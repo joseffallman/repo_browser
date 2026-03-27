@@ -5,6 +5,7 @@ from requests_oauthlib import OAuth2Session
 
 from config import api_base_url, celery_broker_url, celery_result_backend, client_id
 from fastighet.tasks import download_and_create_dxf
+from hojd.tasks import download_and_create_hojd
 from gitea import (
     CRSMISSMATCH,
     _prepare_content,
@@ -20,9 +21,8 @@ celery = Celery(
     broker_connection_retry_on_startup=True,
 )
 
-celery.task(bind=True, name="fastighet.routes.download_and_create_dxf")(
-    download_and_create_dxf
-)
+celery.task(bind=True, name="fastighet.routes.download_and_create_dxf")(download_and_create_dxf)
+celery.task(bind=True, name="hojd.routes.download_and_create_hojd")(download_and_create_hojd)
 
 
 @celery.task(bind=True)

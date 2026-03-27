@@ -33,6 +33,7 @@ from crd_reader import crd_to_json
 from crs_systems import crs_list
 from db import db
 from fastighet.routes import fastighetsindelning_bp, limiter
+from hojd.routes import hojd_bp
 from gitea import (
     _prepare_content,
     fetch_file_content,
@@ -45,6 +46,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv("secret_key")
 app.register_blueprint(tasks_routes, url_prefix="/api")
 app.register_blueprint(fastighetsindelning_bp, url_prefix="/fastighet")
+app.register_blueprint(hojd_bp, url_prefix="/hojd")
 limiter.init_app(app)
 
 # Konfigurera SQLite som databas
