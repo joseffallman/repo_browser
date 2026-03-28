@@ -1796,7 +1796,7 @@
 </script>
 
 <script>
-    function sanitizeAsciiInput(inputElement, maxLength = null, removeSpaces = false) {
+    function sanitizeAsciiInput(inputElement, maxLength = null, removeSpaces = false, isFolderName = false) {
         inputElement.addEventListener('input', () => {
             const originalValue = inputElement.value;
             const originalSelectionStart = inputElement.selectionStart;
@@ -1814,17 +1814,22 @@
             // 3. Ta bort icke-ASCII-tecken
             value = value.replace(/[^\x00-\x7F]/g, '');
 
-            // 4. Ta bort mellanslag om önskat
+            // 4. Om det är för mapp-namn, ta bort problematiska tecken
+            if (isFolderName) {
+                value = value.replace(/[\/\\<>:|"|?*]/g, '');  // Ta bort förbjudna tecken för filer/mappar
+            }
+
+            // 5. Ta bort mellanslag om önskat
             if (removeSpaces) {
                 value = value.replace(/\s+/g, '');
             }
 
-            // 5. Trim till maxLength om angivet
+            // 6. Trim till maxLength om angivet
             if (typeof maxLength === 'number' && value.length > maxLength) {
                 value = value.substring(0, maxLength);
             }
 
-            // 6. Om något har ändrats – uppdatera och återställ markör
+            // 7. Om något har ändrats – uppdatera och återställ markör
             if (value !== originalValue) {
                 // Försök beräkna ny position (justera vid tecken som tagits bort)
                 const diff = originalValue.length - value.length;
@@ -1840,7 +1845,7 @@
     }
 
 
-    sanitizeAsciiInput(document.getElementById('folderName'));  // Skapa ny mapp namn
+    sanitizeAsciiInput(document.getElementById('folderName'), null, false, true);  // Skapa ny mapp namn
     sanitizeAsciiInput(document.getElementById('newDes'), 32);  // Beskrivning av punktkod
     sanitizeAsciiInput(document.getElementById('saveAsInput'));  // Spara punkter som namn
 </script>

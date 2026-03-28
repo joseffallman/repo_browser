@@ -49,6 +49,15 @@ app.register_blueprint(fastighetsindelning_bp, url_prefix="/fastighet")
 app.register_blueprint(hojd_bp, url_prefix="/hojd")
 limiter.init_app(app)
 
+def sanitize_folder_name(name):
+    if not name:
+        return None
+    name = name.strip()
+    name = re.sub(r'[\/\\<>:|"|?*]', '', name)
+    if not name:
+        return None
+    return name
+
 # Konfigurera SQLite som databas
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////app/data/app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -351,8 +360,9 @@ def create_folder(repo_name):
     path = request.form.get("path", "")
     owner = request.form.get("owner", "")
 
+    folder_name = sanitize_folder_name(folder_name)
     if not folder_name:
-        flash("Mappnamn får inte vara tomt.", "warning")
+        flash("Ogiltigt mappnamn.", "warning")
         return redirect(
             url_for("repo_content", owner=owner,
                     repo_name=repo_name, path=path)
