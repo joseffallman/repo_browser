@@ -1,9 +1,12 @@
 
+import base64
 import io
 
 import ezdxf
 
 from .lm import fetch_property_data
+
+from config import api_base_url
 
 
 def create_dxf(data):
@@ -48,7 +51,7 @@ def flip_coordinates(geojson_features):
 
 
 # @celery.task(bind=True, name="fastighet.routes.download_and_create_dxf")
-def download_and_create_dxf(self, bbox):
+def download_and_create_dxf(self, bbox, repo_name=None, owner=None, path="/", oauth_token=None):
     """Celery task to download data and create DXF"""
 
     data = fetch_property_data(bbox)
@@ -59,7 +62,47 @@ def download_and_create_dxf(self, bbox):
         "features": flip_coordinates(data)
     }
 
-    return {
-        "geojson": geojson_data,
-        "dxf": dxf_str.encode('utf-8')
-    }
+    if repo_name and owner and oauth_token:
+        # Commit the DXF to the repo
+        from requests_oauthlib import OAuth2Session
+        from config import client_id
+        gitea = OAuth2Session(client_id, token=oauth_token)
+
+        # Generate filename, e.g., fastighet_20240328.dxf
+        from datetime import datetime
+        filename = f"fastighet_{datetime.now().strftime('%Y%m%d_%H%M%S')}.dxf"
+        file_path = f"{path.rstrip('/')}/{filename}" if path != "/" else filename
+
+        commit_data = {
+            "branch": "main",
+            "message": f"Added {filename}",
+            "files": [{
+                "operation": "create",
+                "path": file_path,
+                "content": base64.b64encode(dxf_str.encode("utf-8")).decode("utf-8")
+            }],
+        }
+
+        try:
+            commit_response = gitea.post(
+                f"{api_base_url}/repos/{owner}/{repo_name}/contents", json=commit_data)
+            commit_response.raise_for_status()
+            return {
+                "geojson": geojson_data,
+                "status": "committed",
+                "dxf": dxf_str.encode('utf-8'),
+                "file_path": file_path,
+                "repo_url": {"owner": owner, "repo_name": repo_name, "path": path}
+            }
+        except Exception as e:
+            return {
+                "geojson": geojson_data,
+                "status": "failed",
+                "dxf": dxf_str.encode('utf-8'),
+                "error": str(e)
+            }
+    else:
+        return {
+            "geojson": geojson_data,
+            "dxf": dxf_str.encode('utf-8')
+        }

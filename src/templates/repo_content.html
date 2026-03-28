@@ -49,7 +49,8 @@
     /* Plus och upload knapp */
     .plus-button,
     .upload-button,
-    .search-button {
+    .search-button,
+    .fastighet-button {
         position: fixed;
         width: 50px;
         height: 50px;
@@ -75,6 +76,11 @@
 
     .search-button {
         bottom: 150px;
+        right: 20px;
+    }
+
+    .fastighet-button {
+        bottom: 210px;
         right: 20px;
     }
 
@@ -392,7 +398,10 @@
 {% block title %}Innehåll för användare: {{ repo_name }}{% endblock %}
 {% block body %}
 
-
+<!-- Fastighet-knapp -->
+<button class="fastighet-button" onclick="goToFastighet()">
+    <span class="iconify" data-icon="mdi-map-outline"></span>
+</button>
 
 <!-- Plus-knapp -->
 <button class="plus-button" id="openCreateModal">
@@ -719,6 +728,11 @@
         var searchModal = new bootstrap.Modal(document.getElementById('searchModal'));
         searchModal.show();
 
+    }
+
+    // Gå till fastighet-sidan
+    function goToFastighet() {
+        window.location.href = '{{ url_for('fastighet.index') }}?repo_name={{ repo_name }}&owner={{ owner }}&path=' + encodeURIComponent(getPath());
     }
 </script>
 <script>

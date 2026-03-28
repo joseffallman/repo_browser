@@ -12,9 +12,12 @@
     områden på en timme.</p>
 <p>Informationen hämtas direkt ifrån Lantmäteriets fastighetsregister och packas om till en dxf fil lämplig för
     utsättning med rtk-gps. Koordinatsystemet på färdig DXF fil är <b>SWEREF 99 TM</b></p>
+{% if repo_name %}
+<p><strong>Filen kommer att skapas i: {{ repo_name }}/{% if path != '/' %}{{ path }}{% endif %}</strong></p>
+{% endif %}
 <div id="map" style="width: 100%; height: 500px; margin:10px 0px"></div>
 
-<button type="button" class="btn btn-primary" id="downloadBtn" onclick="startDownload()" disabled>Ladda ner DXF</button>
+<button type="button" class="btn btn-primary" id="downloadBtn" onclick="startDownload()" disabled>{% if repo_name %}Skapa DXF i repo{% else %}Ladda ner DXF{% endif %}</button>
 
 <div id="rate-limit-info" class="font-weight-light text-secondary"></div>
 <div id="download-status" style="display: none;"></div>
@@ -95,7 +98,12 @@
         fetch("{{ url_for('fastighet.download_dxf') }}", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bbox: bbox })
+            body: JSON.stringify({
+                bbox: bbox,
+                repo_name: "{{ repo_name }}",
+                owner: "{{ owner }}",
+                path: "{{ path }}"
+            })
         })
             .then(response => {
                 if (response.status === 429) {
@@ -147,15 +155,23 @@
 
     }
 
+    let pollCounts = new Map();
+
     function pollTaskStatus(taskId) {
         statusbox = document.getElementById("download-status")
+
+        if (!pollCounts.has(taskId)) pollCounts.set(taskId, 0);
 
         fetch("{{ url_for('fastighet.task_status', task_id='taskId') }}".replace('taskId', taskId))
             .then(response => response.json())
             .then(data => {
                 if (data.state === 'SUCCESS') {
                     loadTaskTrackers();
-                    statusbox.innerHTML = "Nedladdning klar!";
+                    if (data.repo_url) {
+                        statusbox.innerHTML = `DXF-fil skapad i repo: <a href="${data.repo_url}">${data.file_path}</a>`;
+                    } else {
+                        statusbox.innerHTML = "Nedladdning klar!";
+                    }
 
                     // Lägg till geojson-lager på kartan
                     if (data.geojson) {
@@ -166,18 +182,24 @@
                         map.removeLayer(drawnBoundsLayer);
                     }
 
-                    // Skapa en dynamisk <a>-tagg för att starta nedladdningen
-                    const startDownloadLink = document.createElement('a');
-                    startDownloadLink.href = data.file_url;
-                    startDownloadLink.download = '';
-                    document.body.appendChild(startDownloadLink);
-                    startDownloadLink.click();
-                    document.body.removeChild(startDownloadLink);
+                    if (data.file_url) {
+                        // Auto download
+                        const startDownloadLink = document.createElement('a');
+                        startDownloadLink.href = data.file_url;
+                        startDownloadLink.download = '';
+                        document.body.appendChild(startDownloadLink);
+                        startDownloadLink.click();
+                        document.body.removeChild(startDownloadLink);
+                    }
+
+                    pollCounts.delete(taskId);
                 } else if (data.state === 'FAILURE') {
                     statusbox.innerHTML = "Nedladdning misslyckades." + data.status;
+                    pollCounts.delete(taskId);
                 }
                 else if (data.state === 'PENDING') {
-                    statusbox.innerHTML += ".";
+                    pollCounts.set(taskId, pollCounts.get(taskId) + 1);
+                    statusbox.innerHTML = "Nedladdning av data från fastighetsregistret pågår" + ".".repeat(pollCounts.get(taskId) % 4);
                     setTimeout(() => {
                         pollTaskStatus(taskId);
                     }, 1000);
@@ -232,7 +254,7 @@
                         <strong>Task ID:</strong> ${tracker.task_id} <br>
                         <strong>Reset:</strong> ${new Date(tracker.reset * 1000).toLocaleString()} <br>
                     </div>
-                    <p class="mb-1"><strong>Skapad:</strong> ${tracker.created_at}</p>
+                    <p class="mb-1"><strong>Skapad:</strong> ${new Date(tracker.created_at).toLocaleString()}</p>
                     <a href="#" onclick="zoomToBBox('${tracker.bbox}')" class="btn btn-sm btn-outline-primary me-2">Zooma in på</a>
                     <a href="${tracker.download_url}" class="btn btn-sm btn-success ${tracker.file_path ? '' : 'disabled'}">Ladda ned fil</a>
                     `;

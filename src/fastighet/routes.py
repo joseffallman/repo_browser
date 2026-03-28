@@ -66,7 +66,10 @@ limiter = Limiter(
 @login_required
 def index():
     cleanup_temp_files()
-    return render_template('fastighet.html')
+    repo_name = request.args.get('repo_name')
+    owner = request.args.get('owner')
+    path = request.args.get('path', '/')
+    return render_template('fastighet.html', repo_name=repo_name, owner=owner, path=path)
 
 
 @fastighetsindelning_bp.route('/api/trackers', methods=['GET'])
@@ -75,7 +78,7 @@ def get_trackers():
     cleanup_temp_files()
     trackers = TaskTracker.query.filter(
         TaskTracker.user_email == session["user"]['email'],
-        TaskTracker.rate_limit_reset >= datetime.now()
+        TaskTracker.expires_at >= datetime.now()
     ).order_by(TaskTracker.created_at.asc()).all()
 
     tracker: TaskTracker = trackers[0] if trackers else None
@@ -92,14 +95,14 @@ def get_trackers():
     tracker_list = [
         {
             "task_id": t.task_id,
-            "created_at": t.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            "created_at": t.created_at.isoformat() + 'Z',
             "reset": int(t.rate_limit_reset.timestamp()),
             "bbox": t.bbox,
             "geojson": t.geojson,
             "file_path": t.file_path,
             "download_url": url_for("fastighet.download_file", task_id=t.task_id)
         }
-        for t in trackers
+        for t in trackers if t.file_path and os.path.exists(t.file_path)
     ]
 
     return jsonify({"trackers": tracker_list, "rate_info": rate_info})
@@ -109,10 +112,11 @@ def get_trackers():
 @login_required
 def get_working_tasks():
     # Hämta alla aktiva tasks för den inloggade användaren
+    now = datetime.now()
     trackers = TaskTracker.query.filter(
         TaskTracker.user_email == session["user"]['email'],
-        TaskTracker.expires_at == None,
-        TaskTracker.file_path == None,
+        TaskTracker.expires_at > now,
+        TaskTracker.file_path is None,
     ).all()
 
     if not trackers:
@@ -124,7 +128,7 @@ def get_working_tasks():
 
 
 @fastighetsindelning_bp.route('/download', methods=['POST'])
-@limiter.limit("5 per hour")
+@limiter.limit("500 per hour")
 @login_required
 def download_dxf():
     bbox = request.json.get("bbox")
@@ -137,9 +141,21 @@ def download_dxf():
     except Exception as e:
         print("Unable to clean temp files", e)
 
+    repo_name = request.json.get("repo_name", None)
+    owner = request.json.get("owner", None)
+    path = request.json.get("path", "/")
+    oauth_token = session["oauth_token"]
+    if (repo_name and owner and
+        repo_name == 'None' or owner == 'None'):
+        repo_name = None
+        owner = None
+        path = "/"
+        oauth_token = None
+
+
     # Starta Celery-task
     task = celery.send_task(
-        "fastighet.routes.download_and_create_dxf", args=[bbox])
+        "fastighet.routes.download_and_create_dxf", args=[bbox, repo_name, owner, path, oauth_token])
 
     # Hämta rate-limit-information från Flask-Limiter
     limit = limiter.current_limit
@@ -154,6 +170,7 @@ def download_dxf():
         rate_limit_total=limit.limit.amount,
         rate_limit_reset=datetime.fromtimestamp(reset_at),
         bbox=bbox,
+        expires_at=datetime.now() + timedelta(hours=24),
     )
     db.session.add(tracker)
     db.session.commit()
@@ -224,6 +241,7 @@ def api_download_dxf():
         rate_limit_total=limit.limit.amount,
         rate_limit_reset=reset_at,
         bbox=bbox_str,
+        expires_at=datetime.now() + timedelta(hours=24),
     )
     db.session.add(tracker)
     db.session.commit()
@@ -242,7 +260,10 @@ def cleanup_temp_files():
     """Tömmer file_path, geojson och expires_at för trackers vars expires_at har passerats."""
     now = datetime.now()
     expired_trackers = TaskTracker.query.filter(
-        TaskTracker.expires_at < now).all()
+        TaskTracker.expires_at < now,
+        TaskTracker.file_path is not None,
+        TaskTracker.geojson is not None
+    ).all()
 
     tracker: TaskTracker
     for tracker in expired_trackers:
@@ -262,11 +283,15 @@ def task_status(task_id):
     if task.state == 'PENDING':
         response = {"state": task.state, "status": "Task is pending..."}
     elif task.state == 'SUCCESS':
-        # Hämta task info från databasen och kontrollera om filen redan finns
+        # Hämta task info från databasen
         tracker: TaskTracker = TaskTracker.query.filter_by(
             task_id=task_id).first()
-        if tracker and not tracker.file_path:
+        if tracker:
+            tracker.geojson = json.dumps(task.info["geojson"])
+            db.session.commit()
 
+        # Skapa temp-fil om inte finns
+        if tracker and not tracker.file_path:
             # Skapa en temporär fil med mkstemp
             fd, temp_file_path = tempfile.mkstemp(
                 prefix="fastighet_",
@@ -278,22 +303,34 @@ def task_status(task_id):
                 temp_file.write(task.info["dxf"])
 
             # Uppdatera TaskTracker med filens sökväg
-            tracker: TaskTracker = TaskTracker.query.filter_by(
-                task_id=task_id).first()
-            if tracker and not tracker.file_path:
-                tracker.file_path = temp_file_path
-                tracker.expires_at = datetime.now() + timedelta(hours=24)
-                tracker.geojson = json.dumps(task.info["geojson"])
-                db.session.commit()
+            tracker.file_path = temp_file_path
+            tracker.expires_at = datetime.now() + timedelta(hours=24)
+            db.session.commit()
 
         # Returnera filens URL
         file_url = url_for("fastighet.download_file", task_id=task_id)
-        response = {
-            "state": task.state,
-            "status": "Task completed!",
-            "file_url": file_url,
-            "geojson": task.info["geojson"]
-        }
+
+        if "status" in task.info and task.info["status"] == "committed":
+            response = {
+                "state": task.state,
+                "status": "DXF file committed to repo!",
+                "file_path": task.info.get("file_path"),
+                "repo_url": url_for("repo_content", owner=task.info["repo_url"]["owner"], repo_name=task.info["repo_url"]["repo_name"], path=task.info["repo_url"]["path"]),
+                "file_url": file_url
+            }
+        elif "status" in task.info and task.info["status"] == "failed":
+            response = {
+                "state": task.state,
+                "status": "Failed to commit DXF: " + task.info.get("error", "Unknown error")
+            }
+        else:
+            # Legacy download behavior
+            response = {
+                "state": task.state,
+                "status": "Task completed!",
+                "file_url": file_url,
+                "geojson": task.info["geojson"]
+            }
     elif task.state == 'FAILURE':
         response = {"state": task.state, "status": str(task.info)}
     else:
