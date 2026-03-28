@@ -128,7 +128,7 @@ def get_working_tasks():
 
 
 @fastighetsindelning_bp.route('/download', methods=['POST'])
-@limiter.limit("500 per hour")
+@limiter.limit("20 per hour")
 @login_required
 def download_dxf():
     bbox = request.json.get("bbox")
