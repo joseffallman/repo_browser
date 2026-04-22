@@ -718,8 +718,38 @@ def export_projekt(repo_name, owner, path):
             )
         )
 
-    # Visa ditt meddelande och återgå till rätt sida
+    # Ta bort settings filen efter export om den skapades av exporten
+    deleteSettingsfiles = []
+    for item in settingsFileCommit:
+         if item.get("operation") == "create":
+             deleteSettingsfiles.append(
+                {
+                    "operation": "delete",
+                    "path": item["path"],
+                }
+             )
 
+    delete_data = {
+        "branch": "main",
+        "message": "Radera settings fil efter export.",
+        "files": deleteSettingsfiles
+    }
+
+    if deleteSettingsfiles:
+        try:
+            delete_response = gitea.post(
+                f"{api_base_url}/repos/{owner}/{repo_name}/contents", json=delete_data
+            )
+            delete_response.raise_for_status()
+        except Exception as e:
+            flash(f"Något gick fel: {str(e)}", "danger")
+            return redirect(
+                url_for(
+                    "repo_content", owner=owner, repo_name=repo_name, path=directory_path
+                )
+            )
+
+    # Visa ditt meddelande och återgå till rätt sida
     flash(
         f"En ny export av {projName} med koordinatsystem {crs_name} har startats.",
         "success",
